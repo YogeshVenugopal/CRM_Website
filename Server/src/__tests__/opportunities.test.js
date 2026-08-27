@@ -209,6 +209,16 @@ describe('Opportunities — Stage Transitions', () => {
     await request(app).patch(`/api/v1/opportunities/${id}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'qualification' });
     await request(app).patch(`/api/v1/opportunities/${id}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'proposal' });
     await request(app).patch(`/api/v1/opportunities/${id}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'negotiation' });
+
+    // Create and accept a quotation (required by Phase 4)
+    const quoteRes = await request(app)
+      .post('/api/v1/quotations')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ opportunity: id, items: [{ description: 'Work', quantity: 1, unitPrice: 100000, taxPercent: 18 }], validUntil: '2026-12-31T00:00:00.000Z' });
+    const quoteId = quoteRes.body.data._id;
+    await request(app).patch(`/api/v1/quotations/${quoteId}/send`).set('Authorization', `Bearer ${adminToken}`);
+    await request(app).patch(`/api/v1/quotations/${quoteId}/accept`).set('Authorization', `Bearer ${adminToken}`);
+
     await request(app).patch(`/api/v1/opportunities/${id}/won`).set('Authorization', `Bearer ${adminToken}`).send({});
 
     const res = await request(app)
@@ -230,6 +240,15 @@ describe('Opportunities — Won & Lost', () => {
     await request(app).patch(`/api/v1/opportunities/${id}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'qualification' });
     await request(app).patch(`/api/v1/opportunities/${id}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'proposal' });
     await request(app).patch(`/api/v1/opportunities/${id}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'negotiation' });
+
+    // Create and accept a quotation (required by Phase 4)
+    const quoteRes = await request(app)
+      .post('/api/v1/quotations')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ opportunity: id, items: [{ description: 'Work', quantity: 1, unitPrice: 100000, taxPercent: 18 }], validUntil: '2026-12-31T00:00:00.000Z' });
+    const quoteId = quoteRes.body.data._id;
+    await request(app).patch(`/api/v1/quotations/${quoteId}/send`).set('Authorization', `Bearer ${adminToken}`);
+    await request(app).patch(`/api/v1/quotations/${quoteId}/accept`).set('Authorization', `Bearer ${adminToken}`);
 
     const res = await request(app)
       .patch(`/api/v1/opportunities/${id}/won`)

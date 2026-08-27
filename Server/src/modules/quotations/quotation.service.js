@@ -35,23 +35,31 @@ export const calculateQuotationTotals = (items) => {
 
 /**
  * Generate a unique quotation number.
- * Format: QT-YYYY-NNNN (safe under concurrency via atomic counter).
+ * Format: QT-YYYY-NNNN
+ * Uses atomic findOneAndUpdate with upsert for concurrency safety.
  */
-const generateQuotationNumber = async (session) => {
+const generateQuotationNumber = async () => {
   const year = new Date().getFullYear();
   const prefix = `QT-${year}-`;
 
-  // Use MongoDB's findOneAndUpdate with upsert for atomic counter
-  const counter = await mongoose.connection.collection('counters').findOneAndUpdate(
-    { _id: 'quotationNumber' },
-    {
-      $inc: { seq: 1 },
-      $setOnInsert: { _id: 'quotationNumber', seq: 1 },
-    },
-    { upsert: true, returnDocument: 'after', session },
-  );
+  // Try new API first, fall back to old API
+  let counter;
+  try {
+    counter = await mongoose.connection.collection('counters').findOneAndUpdate(
+      { _id: 'quotationNumber' },
+      { $inc: { seq: 1 }, $setOnInsert: { _id: 'quotationNumber', seq: 0 } },
+      { upsert: true, returnDocument: 'after' },
+    );
+  } catch (_e) {
+    counter = await mongoose.connection.collection('counters').findOneAndUpdate(
+      { _id: 'quotationNumber' },
+      { $inc: { seq: 1 }, $setOnInsert: { _id: 'quotationNumber', seq: 0 } },
+      { upsert: true, new: true },
+    );
+  }
 
-  const seq = counter?.seq || 1;
+  // Extract seq from various possible response formats
+  const seq = counter?.seq || counter?.value?.seq || 1;
   const num = String(seq).padStart(4, '0');
   return `${prefix}${num}`;
 };
@@ -114,7 +122,7 @@ const buildFilter = (query, user) => {
     if (query.validUntilTo) filter.validUntil.$lte = new Date(query.validUntilTo);
   }
 
-  // Ownership visibility: sales users only see quotations for their opportunities
+  // Ownership visibility: sales users only see their own quotations
   const roleName = user.role?.name;
   if (roleName === 'sales') {
     filter.createdBy = user._id;
@@ -164,38 +172,24 @@ export const createQuotation = async (data, user) => {
   // Calculate totals server-side
   const { subtotal, tax, total } = calculateQuotationTotals(data.items);
 
-  // Generate quotation number atomically
-  const session = await mongoose.startSession();
-  let quotation;
+  // Generate quotation number
+  const quotationNumber = await generateQuotationNumber();
 
-  try {
-    await session.withTransaction(async () => {
-      const quotationNumber = await generateQuotationNumber(session);
-
-      const [result] = await Quotation.create(
-        [{
-          quotationNumber,
-          opportunity: data.opportunity,
-          client: data.client || opportunity.client,
-          createdBy: user._id,
-          items: data.items,
-          subtotal,
-          tax,
-          total,
-          currency: data.currency || opportunity.currency || 'INR',
-          status: 'draft',
-          validUntil: data.validUntil ? new Date(data.validUntil) : null,
-          notes: data.notes,
-          termsAndConditions: data.termsAndConditions,
-        }],
-        { session },
-      );
-
-      quotation = result;
-    });
-  } finally {
-    session.endSession();
-  }
+  const quotation = await Quotation.create({
+    quotationNumber,
+    opportunity: data.opportunity,
+    client: data.client || opportunity.client,
+    createdBy: user._id,
+    items: data.items,
+    subtotal,
+    tax,
+    total,
+    currency: data.currency || opportunity.currency || 'INR',
+    status: 'draft',
+    validUntil: data.validUntil ? new Date(data.validUntil) : null,
+    notes: data.notes,
+    termsAndConditions: data.termsAndConditions,
+  });
 
   logger.info(`Quotation created: ${quotation.quotationNumber} by ${user.email}`);
   return quotation;
@@ -476,45 +470,30 @@ export const createVersion = async (id, user) => {
     );
   }
 
-  // Generate new quotation number
-  const session = await mongoose.startSession();
-  let newQuotation;
+  const quotationNumber = await generateQuotationNumber();
 
-  try {
-    await session.withTransaction(async () => {
-      const quotationNumber = await generateQuotationNumber(session);
-
-      const [result] = await Quotation.create(
-        [{
-          quotationNumber,
-          version: original.version + 1,
-          parentQuotation: original._id,
-          opportunity: original.opportunity,
-          client: original.client,
-          createdBy: user._id,
-          items: original.items.map((item) => ({
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            taxPercent: item.taxPercent,
-          })),
-          subtotal: original.subtotal,
-          tax: original.tax,
-          total: original.total,
-          currency: original.currency,
-          status: 'draft',
-          validUntil: original.validUntil,
-          notes: original.notes,
-          termsAndConditions: original.termsAndConditions,
-        }],
-        { session },
-      );
-
-      newQuotation = result;
-    });
-  } finally {
-    session.endSession();
-  }
+  const newQuotation = await Quotation.create({
+    quotationNumber,
+    version: original.version + 1,
+    parentQuotation: original._id,
+    opportunity: original.opportunity,
+    client: original.client,
+    createdBy: user._id,
+    items: original.items.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      taxPercent: item.taxPercent,
+    })),
+    subtotal: original.subtotal,
+    tax: original.tax,
+    total: original.total,
+    currency: original.currency,
+    status: 'draft',
+    validUntil: original.validUntil,
+    notes: original.notes,
+    termsAndConditions: original.termsAndConditions,
+  });
 
   logger.info(`Quotation version created: ${original.quotationNumber} v${original.version} → ${newQuotation.quotationNumber} v${newQuotation.version} by ${user.email}`);
   return newQuotation;

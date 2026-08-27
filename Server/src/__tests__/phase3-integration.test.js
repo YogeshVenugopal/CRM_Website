@@ -97,7 +97,21 @@ describe('Phase 3 Integration — Full Pipeline Flow', () => {
       .set('Authorization', `Bearer ${salesTokenA}`)
       .send({ client: clientId });
 
-    // Step 8: Mark opportunity as won
+    // Step 8: Create and accept a quotation (required by Phase 4)
+    const quoteRes = await request(app)
+      .post('/api/v1/quotations')
+      .set('Authorization', `Bearer ${salesTokenA}`)
+      .send({
+        opportunity: opportunityId,
+        client: clientId,
+        items: [{ description: 'Website Development', quantity: 1, unitPrice: 150000, taxPercent: 18 }],
+        validUntil: '2026-12-31T00:00:00.000Z',
+      });
+    const quoteId = quoteRes.body.data._id;
+    await request(app).patch(`/api/v1/quotations/${quoteId}/send`).set('Authorization', `Bearer ${salesTokenA}`);
+    await request(app).patch(`/api/v1/quotations/${quoteId}/accept`).set('Authorization', `Bearer ${salesTokenA}`);
+
+    // Step 9: Mark opportunity as won
     const wonRes = await request(app)
       .patch(`/api/v1/opportunities/${opportunityId}/won`)
       .set('Authorization', `Bearer ${salesTokenA}`)
@@ -106,6 +120,7 @@ describe('Phase 3 Integration — Full Pipeline Flow', () => {
     expect(wonRes.status).toBe(200);
     expect(wonRes.body.data.opportunity.stage).toBe('won');
     expect(wonRes.body.data.opportunity.wonAt).toBeDefined();
+    expect(wonRes.body.data.acceptedQuotation).toBeDefined();
 
     // Step 9: Verify client 360 shows the won opportunity
     const client360Res = await request(app)
