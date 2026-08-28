@@ -8,6 +8,17 @@ import logger from '../../core/utils/logger.js';
 
 const REFRESH_TOKEN_HASH_ROUNDS = 10;
 
+const parseDurationSeconds = (value, fallback) => {
+  if (!value) return fallback;
+  if (/^\d+$/.test(value)) return Number(value);
+
+  const match = value.match(/^(\d+)\s*(s|m|h|d)$/i);
+  if (!match) return fallback;
+
+  const multipliers = { s: 1, m: 60, h: 60 * 60, d: 24 * 60 * 60 };
+  return Number(match[1]) * multipliers[match[2].toLowerCase()];
+};
+
 /**
  * Hash a refresh token for storage
  */
@@ -29,7 +40,10 @@ const createSession = async (user) => {
   // Store session in Redis
   const redis = getRedisClient();
   if (redis) {
-    const refreshExpiry = parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN, 10) || 7 * 24 * 60 * 60;
+    const refreshExpiry = parseDurationSeconds(
+      process.env.REFRESH_TOKEN_EXPIRES_IN,
+      7 * 24 * 60 * 60,
+    );
     await redis.set(`session:${user._id}`, refreshTokenHash, { EX: refreshExpiry });
   }
 

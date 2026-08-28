@@ -8,6 +8,87 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Plus, Pencil } from 'lucide-react';
 
+const TaskForm = ({
+  isEdit = false,
+  title,
+  setTitle,
+  description,
+  setDescription,
+  projectId,
+  setProjectId,
+  priority,
+  setPriority,
+  dueDate,
+  setDueDate,
+  projects,
+  formLoading,
+  onSubmit,
+  onCancel,
+}) => (
+  <form onSubmit={onSubmit} className="space-y-4">
+    <Input
+      label="Task Title"
+      placeholder="e.g. Implement API route validations"
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      required
+    />
+
+    <div className="space-y-1.5">
+      <label className="block text-xs font-semibold text-[#8A8FA3] uppercase tracking-wider pl-1">
+        Description
+      </label>
+      <textarea
+        rows={3}
+        className="w-full rounded-2xl border border-[#EEF1FA] bg-[#EEF1FA] text-[#16181D] text-sm p-4 focus:outline-none focus:ring-2 focus:ring-[#3B5BFD]/40 focus:bg-white placeholder-[#8A8FA3] transition-all"
+        placeholder="What needs to be done..."
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+    </div>
+
+    {!isEdit && (
+      <Select
+        label="Project"
+        value={projectId}
+        onChange={(e) => setProjectId(e.target.value)}
+        options={projects.map((project) => ({ label: `${project.code} — ${project.name}`, value: project.id }))}
+        required
+      />
+    )}
+
+    <div className="grid grid-cols-2 gap-4">
+      <Select
+        label="Priority"
+        value={priority}
+        onChange={(e) => setPriority(e.target.value)}
+        options={[
+          { label: 'Low', value: 'low' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'High', value: 'high' },
+          { label: 'Urgent', value: 'urgent' },
+        ]}
+      />
+      <Input
+        label="Due Date"
+        type="date"
+        mono
+        value={dueDate}
+        onChange={(e) => setDueDate(e.target.value)}
+      />
+    </div>
+
+    <div className="flex justify-end gap-3 pt-2 border-t border-[#EEF1FA]">
+      <Button variant="secondary" onClick={onCancel} disabled={formLoading}>
+        Cancel
+      </Button>
+      <Button type="submit" variant="primary" loading={formLoading}>
+        {isEdit ? 'Save Changes' : 'Create Task'}
+      </Button>
+    </div>
+  </form>
+);
+
 export const TaskBoard = () => {
   const { addToast } = useNotification();
   const [tasks, setTasks] = useState([]);
@@ -131,71 +212,6 @@ export const TaskBoard = () => {
     }
   };
 
-  const TaskForm = ({ isEdit = false }) => (
-    <form onSubmit={isEdit ? handleEditTask : handleCreateTask} className="space-y-4">
-      <Input
-        label="Task Title"
-        placeholder="e.g. Implement API route validations"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        required
-      />
-
-      <div className="space-y-1.5">
-        <label className="block text-xs font-semibold text-[#8A8FA3] uppercase tracking-wider pl-1">
-          Description
-        </label>
-        <textarea
-          rows={3}
-          className="w-full rounded-2xl border border-[#EEF1FA] bg-[#EEF1FA] text-[#16181D] text-sm p-4 focus:outline-none focus:ring-2 focus:ring-[#3B5BFD]/40 focus:bg-white placeholder-[#8A8FA3] transition-all"
-          placeholder="What needs to be done..."
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-
-      {!isEdit && (
-        <Select
-          label="Project"
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          options={projects.map((p) => ({ label: `${p.code} — ${p.name}`, value: p.id }))}
-          required
-        />
-      )}
-
-      <div className="grid grid-cols-2 gap-4">
-        <Select
-          label="Priority"
-          value={priority}
-          onChange={(e) => setPriority(e.target.value)}
-          options={[
-            { label: 'Low', value: 'low' },
-            { label: 'Medium', value: 'medium' },
-            { label: 'High', value: 'high' },
-            { label: 'Urgent', value: 'urgent' },
-          ]}
-        />
-        <Input
-          label="Due Date"
-          type="date"
-          mono
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-        />
-      </div>
-
-      <div className="flex justify-end gap-3 pt-2 border-t border-[#EEF1FA]">
-        <Button variant="secondary" onClick={() => { setIsCreateOpen(false); setEditingTask(null); }} disabled={formLoading}>
-          Cancel
-        </Button>
-        <Button type="submit" variant="primary" loading={formLoading}>
-          {isEdit ? 'Save Changes' : 'Create Task'}
-        </Button>
-      </div>
-    </form>
-  );
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -224,7 +240,22 @@ export const TaskBoard = () => {
         title="Create New Task"
         subtitle="Add a task to a project"
       >
-        <TaskForm />
+        <TaskForm
+          title={title}
+          setTitle={setTitle}
+          description={description}
+          setDescription={setDescription}
+          projectId={projectId}
+          setProjectId={setProjectId}
+          priority={priority}
+          setPriority={setPriority}
+          dueDate={dueDate}
+          setDueDate={setDueDate}
+          projects={projects}
+          formLoading={formLoading}
+          onSubmit={handleCreateTask}
+          onCancel={() => setIsCreateOpen(false)}
+        />
       </Modal>
 
       {/* Edit Task Modal */}
@@ -234,7 +265,23 @@ export const TaskBoard = () => {
         title="Edit Task"
         subtitle={editingTask?.title || ''}
       >
-        <TaskForm isEdit />
+        <TaskForm
+          isEdit
+          title={title}
+          setTitle={setTitle}
+          description={description}
+          setDescription={setDescription}
+          projectId={projectId}
+          setProjectId={setProjectId}
+          priority={priority}
+          setPriority={setPriority}
+          dueDate={dueDate}
+          setDueDate={setDueDate}
+          projects={projects}
+          formLoading={formLoading}
+          onSubmit={handleEditTask}
+          onCancel={() => setEditingTask(null)}
+        />
       </Modal>
     </div>
   );

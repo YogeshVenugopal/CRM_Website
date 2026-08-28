@@ -48,7 +48,7 @@ export const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
       )}
 
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-40 w-20 md:w-20 bg-white border-r border-[#EEF1FA] flex flex-col items-center justify-between py-6 transition-transform duration-200 ease-in-out shadow-[0_10px_30px_rgba(0,0,0,0.02)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        className={`fixed md:sticky md:top-0 inset-y-0 left-0 z-40 h-screen w-20 md:w-20 bg-white border-r border-[#EEF1FA] flex flex-col items-center justify-between py-6 transition-transform duration-200 ease-in-out shadow-[0_10px_30px_rgba(0,0,0,0.02)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
       >
         {/* Top: Pinned User Avatar & Brand Logo */}
@@ -106,7 +106,7 @@ export const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
             className="w-10 h-10 rounded-2xl bg-[#EEF1FA] text-[#3B5BFD] flex items-center justify-center font-bold text-xs"
             title={`Role: ${user?.role ? ROLE_LABELS[user.role] : 'User'}`}
           >
-            <ShieldCheck className="w-5 h-5 stroke-[2]" />
+            <ShieldCheck className="w-5 h-5 stroke-2" />
           </div>
         </div>
       </aside>
