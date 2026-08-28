@@ -4,9 +4,17 @@ import logger from '../utils/logger.js';
 let redisClient = null;
 
 export const connectRedis = async () => {
+  const redisUrl = process.env.REDIS_URL;
+  const requireRedis = process.env.REQUIRE_REDIS === 'true';
+
+  if (!redisUrl) {
+    logger.warn('REDIS_URL is not set. Redis-backed sessions, queues, and realtime jobs are disabled.');
+    return null;
+  }
+
   try {
     redisClient = createClient({
-      url: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
+      url: redisUrl,
       socket: {
         connectTimeout: 5000,
       },
@@ -28,7 +36,14 @@ export const connectRedis = async () => {
     return redisClient;
   } catch (error) {
     logger.error(`Redis connection failed: ${error.message}`);
-    throw error;
+    redisClient = null;
+
+    if (requireRedis) {
+      throw error;
+    }
+
+    logger.warn('Continuing without Redis. Set REQUIRE_REDIS=true to make Redis mandatory.');
+    return null;
   }
 };
 

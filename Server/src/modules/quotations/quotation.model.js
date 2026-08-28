@@ -160,7 +160,6 @@ const quotationSchema = new mongoose.Schema(
 );
 
 // Indexes
-quotationSchema.index({ quotationNumber: 1 });
 quotationSchema.index({ opportunity: 1 });
 quotationSchema.index({ client: 1 });
 quotationSchema.index({ status: 1 });

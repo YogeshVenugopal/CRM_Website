@@ -45,13 +45,13 @@ const ROLE_ICONS = {
 };
 
 export const Login = () => {
-  const { login, availableUsers } = useAuth();
+  const { login, register, availableUsers } = useAuth();
   const navigate = useNavigate();
 
   const location = useLocation();
   const [mode, setMode] = useState(location.pathname === '/register' ? 'register' : 'login');
-  const [email, setEmail] = useState('admin@company.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -65,8 +65,6 @@ export const Login = () => {
   const [regRole, setRegRole] = useState('sales');
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState('');
-  const [regSuccess, setRegSuccess] = useState(false);
-
   // Floating animation state
   const [activeFeature, setActiveFeature] = useState(0);
 
@@ -103,21 +101,17 @@ export const Login = () => {
       setRegError('Password must be at least 8 characters.');
       return;
     }
+    if (!regName.trim()) {
+      setRegError('Full name is required.');
+      return;
+    }
 
     setRegLoading(true);
     try {
-      // Try backend registration, fall back to mock
-      const { authApi } = await import('../../lib/api');
-      await authApi.login(regEmail, regPassword);
+      await register(regName, regEmail, regPassword, regRole);
       navigate('/dashboard');
-    } catch {
-      // In mock mode, just show success and switch to login
-      setRegSuccess(true);
-      setTimeout(() => {
-        setMode('login');
-        setEmail(regEmail);
-        setRegSuccess(false);
-      }, 2000);
+    } catch (err) {
+      setRegError(err.message || 'Registration failed. Please try again.');
     } finally {
       setRegLoading(false);
     }
@@ -126,12 +120,13 @@ export const Login = () => {
   const handleDemoLogin = async (userEmail) => {
     setEmail(userEmail);
     setPassword('password123');
+    setError('');
     setLoading(true);
     try {
       await login(userEmail, 'password123');
       navigate('/dashboard');
-    } catch {
-      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Login failed. Make sure the backend is running and users are seeded.');
     } finally {
       setLoading(false);
     }
@@ -333,14 +328,6 @@ export const Login = () => {
                 <span className="text-[10px] font-bold">!</span>
               </div>
               {error || regError}
-            </div>
-          )}
-
-          {/* Success Display */}
-          {regSuccess && (
-            <div className="flex items-center gap-2 p-3.5 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] text-xs text-[#059669] font-medium">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              Account created successfully! Redirecting to sign in...
             </div>
           )}
 

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import User from '../users/user.model.js';
+import Role from '../users/role.model.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../../core/utils/tokens.js';
 import { getRedisClient } from '../../core/config/redis.js';
 import AppError from '../../core/utils/AppError.js';
@@ -59,6 +60,46 @@ const setTokenCookies = (res, accessToken, refreshToken) => {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/api/v1/auth', // Restrict refresh cookie to auth routes
   });
+};
+
+/**
+ * Register a new user
+ */
+export const register = async (name, email, password, roleName, res) => {
+  // Check if email already exists
+  const existing = await User.findOne({ email });
+  if (existing) {
+    throw new AppError('Email already in use', 409, 'EMAIL_EXISTS');
+  }
+
+  // Find the role
+  const role = await Role.findOne({ name: roleName || 'employee' });
+  if (!role) {
+    throw new AppError('Invalid role', 400, 'INVALID_ROLE');
+  }
+
+  // Create user
+  const user = new User({
+    name,
+    email,
+    role: role._id,
+    isActive: true,
+  });
+  user.password = password; // Virtual setter → passwordHash
+  await user.save();
+
+  // Reload with populated role for session creation
+  const populatedUser = await User.findById(user._id).populate('role');
+
+  const { accessToken, refreshToken } = await createSession(populatedUser);
+  setTokenCookies(res, accessToken, refreshToken);
+
+  logger.info(`User registered: ${user.email} with role ${role.name}`);
+
+  return {
+    user: populatedUser.toJSON(),
+    accessToken,
+  };
 };
 
 /**
@@ -159,6 +200,23 @@ export const logout = async (userId) => {
 };
 
 /**
+ * Get public user list for login page (name, email, role name)
+ */
+export const getPublicUsers = async () => {
+  const users = await User.find({ isActive: true })
+    .select('name email role')
+    .populate('role', 'name')
+    .sort('name');
+
+  return users.map((u) => ({
+    id: u._id,
+    name: u.name,
+    email: u.email,
+    role: u.role?.name || 'employee',
+  }));
+};
+
+/**
  * Get current user
  */
 export const getMe = async (userId) => {
@@ -171,4 +229,4 @@ export const getMe = async (userId) => {
   return user;
 };
 
-export default { login, refresh, logout, getMe };
+export default { register, login, refresh, logout, getMe, getPublicUsers };

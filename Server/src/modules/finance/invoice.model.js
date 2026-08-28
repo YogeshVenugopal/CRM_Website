@@ -148,7 +148,6 @@ const invoiceSchema = new mongoose.Schema(
 );
 
 // Indexes
-invoiceSchema.index({ invoiceNumber: 1 });
 invoiceSchema.index({ client: 1, status: 1 });
 invoiceSchema.index({ project: 1, status: 1 });
 invoiceSchema.index({ opportunity: 1 });

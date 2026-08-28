@@ -8,6 +8,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "seed": "node src/core/scripts/seedRoles.js",
+    "seed:users": "node src/core/scripts/seedUsers.js",
+    "seed:all": "npm run seed && npm run seed:users",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest --forceExit --detectOpenHandles",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch --forceExit --detectOpenHandles",
     "lint": "eslint src/",

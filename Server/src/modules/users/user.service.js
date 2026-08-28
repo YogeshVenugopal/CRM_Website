@@ -87,7 +87,7 @@ export const createUser = async ({ name, email, password, role, phone }) => {
  */
 export const updateUser = async (id, updates) => {
   const user = await User.findByIdAndUpdate(id, updates, {
-    new: true,
+    returnDocument: 'after',
     runValidators: true,
   }).populate('role');
 
@@ -102,7 +102,7 @@ export const updateUser = async (id, updates) => {
  * Activate user
  */
 export const activateUser = async (id) => {
-  const user = await User.findByIdAndUpdate(id, { isActive: true }, { new: true }).populate('role');
+  const user = await User.findByIdAndUpdate(id, { isActive: true }, { returnDocument: 'after' }).populate('role');
 
   if (!user) {
     throw new AppError('User not found', 404, 'USER_NOT_FOUND');
@@ -116,7 +116,7 @@ export const activateUser = async (id) => {
  * Deactivate user
  */
 export const deactivateUser = async (id) => {
-  const user = await User.findByIdAndUpdate(id, { isActive: false }, { new: true }).populate('role');
+  const user = await User.findByIdAndUpdate(id, { isActive: false }, { returnDocument: 'after' }).populate('role');
 
   if (!user) {
     throw new AppError('User not found', 404, 'USER_NOT_FOUND');
@@ -135,7 +135,7 @@ export const updateUserRole = async (id, roleId) => {
     throw new AppError('Invalid role', 400, 'INVALID_ROLE');
   }
 
-  const user = await User.findByIdAndUpdate(id, { role: roleId }, { new: true })
+  const user = await User.findByIdAndUpdate(id, { role: roleId }, { returnDocument: 'after' })
     .populate('role');
 
   if (!user) {

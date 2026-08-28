@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi } from '../lib/api';
+import { apiClient } from '../lib/apiClient';
 
 const AuthContext = createContext(null);
 
@@ -33,6 +34,17 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  const register = useCallback(async (name, email, password, role) => {
+    setLoading(true);
+    try {
+      const { user: newUser } = await authApi.register(name, email, password, role);
+      setUser(newUser);
+      return newUser;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -43,21 +55,44 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Available users for login page demo selector
+  // Fetch available users from backend for login page quick-select
   const [availableUsers, setAvailableUsers] = useState([]);
+
   useEffect(() => {
-    import('../mock/mockData')
-      .then(({ MOCK_USERS }) => setAvailableUsers(MOCK_USERS))
-      .catch(() => {});
+    const fetchUsers = async () => {
+      try {
+        // Fetch real seeded users from the public auth endpoint
+        const res = await apiClient.get('/auth/public-users');
+        const users = (res.data || []).map((u) => ({
+          id: u.id || u._id,
+          name: u.name,
+          email: u.email,
+          role: u.role || 'employee',
+        }));
+        if (users.length > 0) setAvailableUsers(users);
+      } catch {
+        // If backend is not running or users aren't seeded, use fallback
+        setAvailableUsers([
+          { id: '1', name: 'Alex Vance', email: 'admin@company.com', role: 'admin' },
+          { id: '2', name: 'Eleanor Vance', email: 'management@company.com', role: 'management' },
+          { id: '3', name: 'Marcus Sterling', email: 'sales@company.com', role: 'sales' },
+          { id: '4', name: 'Sarah Jenkins', email: 'pm@company.com', role: 'project_manager' },
+          { id: '5', name: 'David Chen', email: 'employee@company.com', role: 'employee' },
+          { id: '6', name: 'Rachel Green', email: 'finance@company.com', role: 'finance' },
+        ]);
+      }
+    };
+    fetchUsers();
   }, []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        role: user?.role || 'admin',
+        role: user?.role || null,
         loading,
         login,
+        register,
         logout,
         availableUsers,
       }}

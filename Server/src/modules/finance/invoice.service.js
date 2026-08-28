@@ -396,7 +396,7 @@ export const recordPayment = async (invoiceId, paymentData, user) => {
         ...(newStatus === 'paid' ? { paidAt: new Date() } : {}),
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!result) {

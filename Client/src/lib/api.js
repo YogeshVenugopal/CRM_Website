@@ -23,6 +23,12 @@ const toDateStr = (d) => (d ? new Date(d).toISOString() : null);
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
 export const authApi = {
+  async register(name, email, password, role) {
+    const res = await apiClient.post('/auth/register', { name, email, password, role });
+    const raw = res.data;
+    return { user: normalizeUser(raw.user), accessToken: raw.accessToken };
+  },
+
   async login(email, password) {
     const res = await apiClient.post('/auth/login', { email, password });
     // res = { success, data: { user, accessToken } }

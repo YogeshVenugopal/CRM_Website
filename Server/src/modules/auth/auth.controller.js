@@ -2,6 +2,32 @@ import * as authService from './auth.service.js';
 import { sendSuccess } from '../../core/utils/apiResponse.js';
 
 /**
+ * GET /api/v1/auth/public-users
+ * Returns basic info about active users for the login page.
+ * Only exposes name, email, and role — no sensitive data.
+ */
+export const publicUsers = async (_req, res) => {
+  const users = await authService.getPublicUsers();
+  return sendSuccess(res, { data: users });
+};
+
+/**
+ * POST /api/v1/auth/register
+ */
+export const register = async (req, res) => {
+  const { name, email, password, role } = req.body;
+  const result = await authService.register(name, email, password, role, res);
+
+  return sendSuccess(res, {
+    data: {
+      user: result.user,
+      accessToken: result.accessToken,
+    },
+    statusCode: 201,
+  });
+};
+
+/**
  * POST /api/v1/auth/login
  */
 export const login = async (req, res) => {
@@ -51,4 +77,4 @@ export const me = async (req, res) => {
   return sendSuccess(res, { data: user });
 };
 
-export default { login, refresh, logout, me };
+export default { register, login, refresh, logout, me };

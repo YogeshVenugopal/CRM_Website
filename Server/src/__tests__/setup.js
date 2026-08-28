@@ -131,6 +131,6 @@ export const seedTestRoles = async () => {
   ];
 
   for (const roleData of roles) {
-    await Role.findOneAndUpdate({ name: roleData.name }, roleData, { upsert: true, new: true });
+    await Role.findOneAndUpdate({ name: roleData.name }, roleData, { upsert: true, returnDocument: 'after' });
   }
 };

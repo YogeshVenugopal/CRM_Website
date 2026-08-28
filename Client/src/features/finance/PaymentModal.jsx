@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -13,13 +13,23 @@ export const PaymentModal = ({
   onConfirmPayment,
   loading,
 }) => {
-  if (!invoice) return null;
-
-  const [amount, setAmount] = useState(invoice.balance || 0);
+  const [amount, setAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
   const [transactionRef, setTransactionRef] = useState('');
   const [notes, setNotes] = useState('');
   const [validationError, setValidationError] = useState('');
+
+  useEffect(() => {
+    if (!invoice || !isOpen) return;
+
+    setAmount(invoice.balance || 0);
+    setPaymentMethod('Bank Transfer');
+    setTransactionRef('');
+    setNotes('');
+    setValidationError('');
+  }, [invoice, isOpen]);
+
+  if (!invoice) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
