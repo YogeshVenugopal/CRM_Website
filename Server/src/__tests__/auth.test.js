@@ -58,6 +58,23 @@ describe('Authentication', () => {
       expect(res.body.data.user.refreshTokenHash).toBeUndefined();
     });
 
+    it('should authenticate subsequent requests with the login cookies', async () => {
+      await createUser();
+
+      const agent = request.agent(app);
+      await agent
+        .post('/api/v1/auth/login')
+        .send({ email: testUser.email, password: testUser.password })
+        .expect(200);
+
+      const res = await agent
+        .get('/api/v1/auth/me')
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.email).toBe(testUser.email);
+    });
+
     it('should fail with wrong password', async () => {
       await createUser();
 

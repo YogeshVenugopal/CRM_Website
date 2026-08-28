@@ -43,16 +43,18 @@ const createSession = async (user) => {
  * Set cookies on response
  */
 const setTokenCookies = (res, accessToken, refreshToken) => {
+  const configuredDomain = process.env.COOKIE_DOMAIN;
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE === 'true',
     sameSite: process.env.COOKIE_SAME_SITE || 'lax',
-    domain: process.env.COOKIE_DOMAIN || undefined,
+    domain: configuredDomain && configuredDomain !== 'localhost' ? configuredDomain : undefined,
   };
 
   res.cookie('accessToken', accessToken, {
     ...cookieOptions,
     maxAge: 15 * 60 * 1000, // 15 minutes
+    path: '/',
   });
 
   res.cookie('refreshToken', refreshToken, {

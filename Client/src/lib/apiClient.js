@@ -9,6 +9,7 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+let refreshPromise = null;
 
 // Request interceptor — attach access token from cookie if needed
 apiClient.interceptors.request.use(
@@ -27,6 +28,21 @@ apiClient.interceptors.response.use(
     const serverError = error.response?.data?.error;
     const serverMessage =
       serverError?.message || error.response?.data?.message || '';
+
+    const originalRequest = error.config;
+    if (
+      status === 401 &&
+      serverError?.code === 'TOKEN_EXPIRED' &&
+      originalRequest &&
+      !originalRequest._retry
+    ) {
+      originalRequest._retry = true;
+      refreshPromise ||= apiClient.post('/auth/refresh').finally(() => {
+        refreshPromise = null;
+      });
+
+      return refreshPromise.then(() => apiClient(originalRequest));
+    }
 
     // Network error — backend is down
     if (!error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED') {
