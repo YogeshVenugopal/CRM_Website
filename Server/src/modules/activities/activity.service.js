@@ -3,6 +3,7 @@ import Lead from '../leads/lead.model.js';
 import Opportunity from '../pipeline/opportunity.model.js';
 import Client from '../clients/client.model.js';
 import Quotation from '../quotations/quotation.model.js';
+import Project from '../projects/project.model.js';
 import AppError from '../../core/utils/AppError.js';
 import { assertOwnershipOrPrivileged } from '../../core/middleware/rbac.js';
 import logger from '../../core/utils/logger.js';
@@ -72,7 +73,18 @@ const RESOURCE_ACCESSORS = {
       return true;
     },
   },
-  // Phase 5: Project will be added here
+  Project: {
+    model: Project,
+    canAccess: (resource, user) => {
+      const roleName = user.role?.name;
+      if (PRIVILEGED_ROLES.includes(roleName)) return true;
+      if (roleName === 'project_manager') return true;
+      if (resource.manager?.toString() === user._id?.toString()) return true;
+      if (resource.createdBy?.toString() === user._id?.toString()) return true;
+      if (resource.team?.some((id) => id.toString() === user._id?.toString())) return true;
+      return false;
+    },
+  },
 };
 
 /**

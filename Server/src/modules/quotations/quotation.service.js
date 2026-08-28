@@ -42,24 +42,13 @@ const generateQuotationNumber = async () => {
   const year = new Date().getFullYear();
   const prefix = `QT-${year}-`;
 
-  // Try new API first, fall back to old API
-  let counter;
-  try {
-    counter = await mongoose.connection.collection('counters').findOneAndUpdate(
-      { _id: 'quotationNumber' },
-      { $inc: { seq: 1 }, $setOnInsert: { _id: 'quotationNumber', seq: 0 } },
-      { upsert: true, returnDocument: 'after' },
-    );
-  } catch (_e) {
-    counter = await mongoose.connection.collection('counters').findOneAndUpdate(
-      { _id: 'quotationNumber' },
-      { $inc: { seq: 1 }, $setOnInsert: { _id: 'quotationNumber', seq: 0 } },
-      { upsert: true, new: true },
-    );
-  }
+  const counter = await mongoose.connection.collection('counters').findOneAndUpdate(
+    { _id: 'quotationNumber' },
+    [{ $set: { seq: { $add: [{ $ifNull: ['$seq', 0] }, 1] } } }],
+    { upsert: true, returnDocument: 'after' },
+  );
 
-  // Extract seq from various possible response formats
-  const seq = counter?.seq || counter?.value?.seq || 1;
+  const seq = counter?.seq || 1;
   const num = String(seq).padStart(4, '0');
   return `${prefix}${num}`;
 };

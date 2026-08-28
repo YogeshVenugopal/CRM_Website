@@ -2,6 +2,9 @@ import Opportunity from './opportunity.model.js';
 import Lead from '../leads/lead.model.js';
 import User from '../users/user.model.js';
 import Quotation from '../quotations/quotation.model.js';
+import Project from '../projects/project.service.js';
+import Invoice from '../finance/invoice.service.js';
+import Client from '../clients/client.model.js';
 import AppError from '../../core/utils/AppError.js';
 import { assertOwnershipOrPrivileged } from '../../core/middleware/rbac.js';
 import logger from '../../core/utils/logger.js';
@@ -351,8 +354,8 @@ export const markWon = async (id, user, _quotationId = null) => {
   }
 
   // If a specific quotationId was provided, validate it matches
-  if (quotationId) {
-    if (acceptedQuotation._id.toString() !== quotationId) {
+  if (_quotationId) {
+    if (acceptedQuotation._id.toString() !== _quotationId) {
       throw new AppError(
         'The provided quotation is not the accepted quotation for this opportunity',
         400,
@@ -366,12 +369,57 @@ export const markWon = async (id, user, _quotationId = null) => {
   opportunity.probability = 100;
   await opportunity.save();
 
+  // ─── Phase 5: Sales-to-Project Handover ────────────────────────────────
+  // Create Project from the Won opportunity
+  const projectData = {
+    name: `${opportunity.title} — Project`,
+    client: opportunity.client || acceptedQuotation.client,
+    sourceOpportunity: opportunity._id,
+    sourceQuotation: acceptedQuotation._id,
+    manager: null,
+    team: [],
+    status: 'planned',
+    startDate: null,
+    endDate: null,
+    budget: acceptedQuotation.total || 0,
+    currency: acceptedQuotation.currency || opportunity.currency || 'INR',
+    createdBy: user._id,
+  };
+
+  const project = await Project.createFromHandover(projectData);
+
+  // Update project reference on opportunity
+  opportunity.project = project._id;
+  await opportunity.save();
+
+  // ─── Phase 6: Create Draft Invoice ──────────────────────────────────────
+  let draftInvoice = null;
+  if (acceptedQuotation.items && acceptedQuotation.items.length > 0) {
+    draftInvoice = await Invoice.createDraftFromHandover({
+      client: projectData.client,
+      project: project._id,
+      opportunity: opportunity._id,
+      quotation: acceptedQuotation._id,
+      items: acceptedQuotation.items.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        taxPercent: item.taxPercent,
+      })),
+      currency: acceptedQuotation.currency || 'INR',
+      createdBy: user._id,
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+    });
+  }
+
   logger.info(`Opportunity won: ${opportunity.title} with quotation ${acceptedQuotation.quotationNumber} by ${user.email}`);
 
   return {
     opportunity,
     acceptedQuotation,
-    message: 'Opportunity marked as won. Project handover will be handled by Phase 5.',
+    project,
+    draftInvoice,
+    message: 'Opportunity won. Project and draft invoice created.',
   };
 };
 

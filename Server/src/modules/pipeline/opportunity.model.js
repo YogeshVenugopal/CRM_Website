@@ -81,6 +81,11 @@ const opportunitySchema = new mongoose.Schema(
       maxlength: 500,
       default: null,
     },
+    project: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Project',
+      default: null,
+    },
     wonAt: {
       type: Date,
       default: null,

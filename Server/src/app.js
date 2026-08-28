@@ -19,6 +19,11 @@ import activityRoutes from './modules/activities/activity.routes.js';
 import opportunityRoutes from './modules/pipeline/opportunity.routes.js';
 import clientRoutes from './modules/clients/client.routes.js';
 import quotationRoutes from './modules/quotations/quotation.routes.js';
+import projectRoutes from './modules/projects/project.routes.js';
+import taskRoutes from './modules/tasks/task.routes.js';
+import financeRoutes from './modules/finance/finance.routes.js';
+import notificationRoutes from './modules/notifications/notification.routes.js';
+import reportRoutes from './modules/reports/report.routes.js';
 
 const app = express();
 
@@ -58,6 +63,11 @@ app.use(`${apiV1}/activities`, activityRoutes);
 app.use(`${apiV1}/opportunities`, opportunityRoutes);
 app.use(`${apiV1}/clients`, clientRoutes);
 app.use(`${apiV1}/quotations`, quotationRoutes);
+app.use(`${apiV1}/projects`, projectRoutes);
+app.use(`${apiV1}/tasks`, taskRoutes);
+app.use(`${apiV1}/invoices`, financeRoutes);
+app.use(`${apiV1}/notifications`, notificationRoutes);
+app.use(`${apiV1}/reports`, reportRoutes);
 
 // ─── Root Health (non-versioned for load balancers) ──────────────────────────
 app.get('/health', (req, res) => {
