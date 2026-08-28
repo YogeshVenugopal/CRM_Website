@@ -144,7 +144,6 @@ export const leadsApi = {
     if (data.email !== undefined) payload.email = data.email;
     if (data.phone !== undefined) payload.phone = data.phone;
     if (data.source !== undefined) payload.source = data.source;
-    if (data.status !== undefined) payload.status = data.status;
     if (data.budget !== undefined) payload.budget = data.budget;
     if (data.notes !== undefined) payload.notes = data.notes;
     if (data.tags !== undefined) payload.tags = data.tags;
@@ -214,6 +213,11 @@ function normalizeOpportunity(o) {
   };
 }
 
+const toOpportunityDateTime = (date) => {
+  if (!date) return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T00:00:00.000Z` : date;
+};
+
 export const opportunitiesApi = {
   async list(params = {}) {
     const qs = new URLSearchParams();
@@ -244,8 +248,8 @@ export const opportunitiesApi = {
       lead: data.leadId,
       value: data.value,
       currency: data.currency || 'INR',
-      probability: data.probability || 30,
-      expectedCloseDate: data.expectedCloseDate,
+      probability: data.probability ?? 30,
+      expectedCloseDate: toOpportunityDateTime(data.expectedCloseDate),
       assignedTo: data.assignedTo,
     });
     return normalizeOpportunity(res.data);
@@ -256,7 +260,7 @@ export const opportunitiesApi = {
     if (data.title !== undefined) payload.title = data.title;
     if (data.value !== undefined) payload.value = data.value;
     if (data.probability !== undefined) payload.probability = data.probability;
-    if (data.expectedCloseDate !== undefined) payload.expectedCloseDate = data.expectedCloseDate;
+    if (data.expectedCloseDate !== undefined) payload.expectedCloseDate = toOpportunityDateTime(data.expectedCloseDate);
     if (data.clientId !== undefined) payload.client = data.clientId;
     const res = await apiClient.patch(`/opportunities/${id}`, payload);
     return normalizeOpportunity(res.data);
@@ -461,7 +465,7 @@ export const quotationsApi = {
         unitPrice: item.unitPrice,
         taxPercent: item.taxPercent || 18,
       })),
-      validUntil: data.validUntil || data.validityDate,
+      validUntil: toOpportunityDateTime(data.validUntil || data.validityDate),
       notes: data.notes,
       termsAndConditions: data.termsAndConditions,
     });

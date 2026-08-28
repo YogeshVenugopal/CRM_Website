@@ -131,7 +131,7 @@ export const QuotationBuilder = () => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Client & Opportunity Selection */}
-        <div className="p-6 rounded-[24px] border border-[#EEF1FA] bg-white space-y-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
+        <div className="p-6 rounded-3xl border border-[#EEF1FA] bg-white space-y-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
           <h3 className="text-xs font-bold font-display uppercase tracking-wider text-[#8A8FA3]">
             Target Client & Commercial Link
           </h3>
@@ -146,11 +146,12 @@ export const QuotationBuilder = () => {
             />
 
             <Select
-              label="Link Opportunity (Optional)"
+              label="Link Opportunity"
               value={opportunityId}
               onChange={(e) => setOpportunityId(e.target.value)}
-              placeholder="No linked opportunity"
+              placeholder="Select an opportunity..."
               options={opportunities.map((o) => ({ label: o.title, value: o.id }))}
+              required
             />
 
             <Input
@@ -165,7 +166,7 @@ export const QuotationBuilder = () => {
         </div>
 
         {/* Dynamic Line Items Editor */}
-        <div className="p-6 rounded-[24px] border border-[#EEF1FA] bg-white space-y-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
+        <div className="p-6 rounded-3xl border border-[#EEF1FA] bg-white space-y-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
           <div className="flex items-center justify-between border-b border-[#EEF1FA] pb-3">
             <h3 className="text-xs font-bold font-display uppercase tracking-wider text-[#8A8FA3] flex items-center gap-2">
               <Calculator className="w-4 h-4 text-[#3B5BFD]" /> Quotation Line Items

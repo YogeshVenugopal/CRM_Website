@@ -21,6 +21,14 @@ const LEAD_STATUSES = [
   { label: 'Unqualified', value: 'unqualified' },
 ];
 
+const STATUS_TRANSITIONS = {
+  new: ['contacted'],
+  contacted: ['qualified', 'unqualified'],
+  qualified: ['converted'],
+  unqualified: [],
+  converted: [],
+};
+
 export const LeadFormModal = ({
   isOpen,
   onClose,
@@ -29,6 +37,9 @@ export const LeadFormModal = ({
   loading = false,
 }) => {
   const isEdit = Boolean(lead);
+  const availableStatuses = isEdit
+    ? LEAD_STATUSES.filter(({ value }) => value === (lead.status || 'new') || STATUS_TRANSITIONS[lead.status || 'new']?.includes(value))
+    : [];
 
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
@@ -156,7 +167,7 @@ export const LeadFormModal = ({
               label="Status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              options={LEAD_STATUSES}
+              options={availableStatuses}
             />
           )}
         </div>

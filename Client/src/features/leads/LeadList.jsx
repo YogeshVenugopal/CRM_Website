@@ -53,6 +53,9 @@ export const LeadList = () => {
     setFormLoading(true);
     try {
       await leadsApi.update(editingLead.id, data);
+      if (data.status && data.status !== editingLead.status) {
+        await leadsApi.changeStatus(editingLead.id, data.status);
+      }
       addToast({ title: 'Lead updated', message: `"${data.company}" updated successfully.`, type: 'success' });
       fetchLeads();
     } finally {
