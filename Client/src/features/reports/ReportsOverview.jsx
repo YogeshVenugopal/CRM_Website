@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { mockService } from '../../mock/mockService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { reportsApi, financeApi, opportunitiesApi } from '../../lib/api';
 import { formatCurrency } from '../../utils/formatters';
 import { ChartCard } from '../../components/ui/ChartCard';
 import { SkeletonMetric } from '../../components/ui/SkeletonRow';
@@ -20,39 +20,47 @@ export const ReportsOverview = () => {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState(null);
 
-  useEffect(() => {
-    const fetchReports = async () => {
-      setLoading(true);
-      try {
-        const [leads, opps, projs, invs] = await Promise.all([
-          mockService.getLeads(),
-          mockService.getOpportunities(),
-          mockService.getProjects(),
-          mockService.getInvoices(),
-        ]);
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [pipelineRes, financeRes, projectRes, oppsRes, invsRes] = await Promise.allSettled([
+        reportsApi.salesPipeline(),
+        reportsApi.financeOverview(),
+        reportsApi.projectStatus(),
+        opportunitiesApi.list({ limit: 100 }),
+        financeApi.listInvoices({ limit: 100 }),
+      ]);
 
-        const pipelineVal = opps.filter(o => o.stage !== 'won').reduce((a, b) => a + (b.value || 0), 0);
-        const totalInvoiced = invs.reduce((a, b) => a + (b.total || 0), 0);
-        const totalPaid = invs.reduce((a, b) => a + (b.paidAmount || 0), 0);
+      const pipeline = pipelineRes.status === 'fulfilled' ? pipelineRes.value : {};
+      const finance = financeRes.status === 'fulfilled' ? financeRes.value : {};
+      const projectStatus = projectRes.status === 'fulfilled' ? projectRes.value : {};
+      const opps = oppsRes.status === 'fulfilled' ? oppsRes.value.data : [];
+      const invs = invsRes.status === 'fulfilled' ? invsRes.value.data : [];
 
-        setMetrics({
-          leadsCount: leads.length,
-          oppsCount: opps.length,
-          pipelineVal,
-          totalInvoiced,
-          totalPaid,
-          opps,
-          projs,
-          invs,
-        });
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchReports();
+      const pipelineVal = opps.filter(o => o.stage !== 'won' && o.stage !== 'lost').reduce((a, b) => a + (b.value || 0), 0);
+      const totalInvoiced = invs.reduce((a, b) => a + (b.total || 0), 0);
+      const totalPaid = invs.reduce((a, b) => a + (b.paidAmount || 0), 0);
+
+      setMetrics({
+        leadsCount: pipeline.opportunities || opps.length || 0,
+        oppsCount: opps.length,
+        pipelineVal: pipeline.pipelineValue || pipelineVal,
+        totalInvoiced: finance.totalInvoiced || totalInvoiced,
+        totalPaid: finance.totalPaid || totalPaid,
+        opps,
+        projs: [],
+        invs,
+      });
+    } catch (e) {
+      console.error('Reports fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
 
   if (loading || !metrics) {
     return (

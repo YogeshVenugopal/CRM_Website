@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockService } from '../../mock/mockService';
+import { quotationsApi, clientsApi, opportunitiesApi } from '../../lib/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -23,20 +23,25 @@ export const QuotationBuilder = () => {
   );
   const [notes, setNotes] = useState('Payment terms: 30% advance on order confirmation, 70% on final handover.');
 
-  // Dynamic Line Items with Live Recalculation
   const [items, setItems] = useState([
     { description: 'Enterprise Software Customization & Setup', quantity: 1, unitPrice: 250000 },
   ]);
 
   useEffect(() => {
     const loadSelects = async () => {
-      const [cList, oList] = await Promise.all([
-        mockService.getClients(),
-        mockService.getOpportunities(),
-      ]);
-      setClients(cList);
-      setOpportunities(oList);
-      if (cList.length > 0) setClientId(cList[0].id);
+      try {
+        const [cRes, oRes] = await Promise.allSettled([
+          clientsApi.list({ limit: 100 }),
+          opportunitiesApi.list({ limit: 100 }),
+        ]);
+        const cList = cRes.status === 'fulfilled' ? cRes.value.data : [];
+        const oList = oRes.status === 'fulfilled' ? oRes.value.data : [];
+        setClients(cList);
+        setOpportunities(oList);
+        if (cList.length > 0) setClientId(cList[0].id);
+      } catch {
+        // ignore
+      }
     };
     loadSelects();
   }, []);
@@ -57,9 +62,8 @@ export const QuotationBuilder = () => {
     });
   };
 
-  // Live Recalculation Engine
   const subtotal = items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
-  const tax = Math.round(subtotal * 0.18); // 18% GST / Tax
+  const tax = Math.round(subtotal * 0.18);
   const total = subtotal + tax;
 
   const handleSubmit = async (e) => {
@@ -73,20 +77,15 @@ export const QuotationBuilder = () => {
       return;
     }
 
-    const selectedClient = clients.find((c) => c.id === clientId);
-    const selectedOpp = opportunities.find((o) => o.id === opportunityId);
-
     try {
       const formattedItems = items.map((item) => ({
         ...item,
         total: item.quantity * item.unitPrice,
       }));
 
-      const newQt = await mockService.createQuotation({
+      await quotationsApi.create({
         clientId,
-        clientName: selectedClient?.name || 'Client',
         opportunityId,
-        opportunityTitle: selectedOpp?.title || 'General Opportunity',
         validityDate,
         items: formattedItems,
         subtotal,
@@ -97,7 +96,7 @@ export const QuotationBuilder = () => {
 
       addToast({
         title: 'Quotation created',
-        message: `${newQt.quotationNumber} total ${formatCurrency(total)} saved as draft.`,
+        message: `Total ${formatCurrency(total)} saved as draft.`,
         type: 'success',
       });
 
@@ -142,7 +141,7 @@ export const QuotationBuilder = () => {
               label="Select Client Account"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              options={clients.map((c) => ({ label: `${c.name} (${c.industry})`, value: c.id }))}
+              options={clients.map((c) => ({ label: `${c.name} (${c.industry || 'N/A'})`, value: c.id }))}
               required
             />
 
@@ -176,7 +175,6 @@ export const QuotationBuilder = () => {
             </Button>
           </div>
 
-          {/* Line Items Table */}
           <div className="space-y-3">
             {items.map((item, index) => {
               const lineTotal = item.quantity * item.unitPrice;
@@ -239,7 +237,7 @@ export const QuotationBuilder = () => {
             })}
           </div>
 
-          {/* Live Financial Calculation Breakdown in IBM Plex Mono */}
+          {/* Live Financial Calculation Breakdown */}
           <div className="border-t border-[#EEF1FA] pt-4 flex flex-col items-end space-y-1.5 font-mono text-xs">
             <div className="flex justify-between w-64 text-[#8A8FA3]">
               <span>Subtotal:</span>

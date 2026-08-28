@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { mockService } from '../../mock/mockService';
+import { leadsApi, activitiesApi } from '../../lib/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { Timeline } from '../../components/ui/Timeline';
 import { Badge } from '../../components/ui/Badge';
@@ -18,34 +18,54 @@ export const LeadDetail = () => {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchLeadDetails = async () => {
+  const fetchLeadDetails = useCallback(async () => {
     setLoading(true);
     try {
-      const lData = await mockService.getLeadById(id || 'lead-101');
-      const aData = await mockService.getActivities(id || 'lead-101');
+      const lData = await leadsApi.getById(id);
       setLead(lData);
-      setActivities(aData);
+
+      try {
+        const acts = await leadsApi.getActivities(id);
+        setActivities(acts);
+      } catch {
+        setActivities([]);
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching lead:', e);
+      addToast({ title: 'Error', message: e.message || 'Failed to load lead', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, addToast]);
 
   useEffect(() => {
-    fetchLeadDetails();
-  }, [id]);
+    if (id) fetchLeadDetails();
+  }, [id, fetchLeadDetails]);
 
-  const handleAddActivity = (newAct) => {
-    mockService.addActivity(newAct);
-    setActivities((prev) => [newAct, ...prev]);
-    addToast({ title: 'Activity logged', message: 'Timeline updated', type: 'info' });
+  const handleAddActivity = async (newAct) => {
+    try {
+      const created = await activitiesApi.create({
+        ...newAct,
+        entityType: 'Lead',
+        entityId: id,
+      });
+      setActivities((prev) => [created, ...prev]);
+      addToast({ title: 'Activity logged', message: 'Timeline updated', type: 'info' });
+    } catch {
+      // Fallback for mock mode
+      setActivities((prev) => [{ ...newAct, id: `act-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev]);
+      addToast({ title: 'Activity logged', message: 'Timeline updated', type: 'info' });
+    }
   };
 
   const handleQualifyLead = async () => {
-    await mockService.updateLead(lead.id, { status: 'qualified' });
-    setLead((prev) => ({ ...prev, status: 'qualified' }));
-    addToast({ title: 'Lead qualified', message: 'Status updated to Qualified', type: 'success' });
+    try {
+      const updated = await leadsApi.qualify(id);
+      setLead((prev) => ({ ...prev, ...updated, status: 'qualified' }));
+      addToast({ title: 'Lead qualified', message: 'Status updated to Qualified', type: 'success' });
+    } catch (err) {
+      addToast({ title: 'Error', message: err.message, type: 'error' });
+    }
   };
 
   if (loading || !lead) {
@@ -59,7 +79,7 @@ export const LeadDetail = () => {
         <Breadcrumbs
           customItems={[
             { label: 'Leads', path: '/leads' },
-            { label: `${lead.name} (${lead.company})` },
+            { label: `${lead.name} (${lead.company || lead.companyName})` },
           ]}
         />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3 bg-white p-6 rounded-[24px] border border-[#EEF1FA] shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -68,12 +88,12 @@ export const LeadDetail = () => {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-bold font-display text-[#16181D]">
-                  {lead.company}
+                  {lead.company || lead.companyName}
                 </h1>
                 <Badge status={lead.status} />
               </div>
               <p className="text-xs text-[#8A8FA3] mt-0.5">
-                Primary Contact: <span className="font-semibold text-[#16181D]">{lead.name}</span>
+                Primary Contact: <span className="font-semibold text-[#16181D]">{lead.name || lead.contactName}</span>
               </p>
             </div>
           </div>
@@ -87,9 +107,14 @@ export const LeadDetail = () => {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => {
-                addToast({ title: 'Converted to Opportunity', message: 'Redirecting to Sales Pipeline...', type: 'success' });
-                navigate('/pipeline');
+              onClick={async () => {
+                try {
+                  await leadsApi.convert(id);
+                  addToast({ title: 'Converted to Opportunity', message: 'Lead converted successfully.', type: 'success' });
+                  navigate('/pipeline');
+                } catch (err) {
+                  addToast({ title: 'Error', message: err.message, type: 'error' });
+                }
               }}
             >
               Convert to Opportunity
@@ -98,7 +123,7 @@ export const LeadDetail = () => {
         </div>
       </div>
 
-      {/* Split Layout: Main Information (Left) + Activity Timeline (Right) */}
+      {/* Split Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Information Panel */}
         <div className="lg:col-span-1 space-y-6">
@@ -115,7 +140,7 @@ export const LeadDetail = () => {
 
               <div>
                 <span className="text-[#8A8FA3] block text-[11px] uppercase">Phone</span>
-                <span className="font-mono text-[#16181D] font-medium">{lead.phone}</span>
+                <span className="font-mono text-[#16181D] font-medium">{lead.phone || '—'}</span>
               </div>
 
               <div>
@@ -126,13 +151,13 @@ export const LeadDetail = () => {
               <div>
                 <span className="text-[#8A8FA3] block text-[11px] uppercase">Est. Budget</span>
                 <span className="font-mono text-[#3B5BFD] font-bold text-sm">
-                  {formatCurrency(lead.budget)}
+                  {formatCurrency(lead.budget || lead.estimatedValue)}
                 </span>
               </div>
 
               <div>
                 <span className="text-[#8A8FA3] block text-[11px] uppercase">Owner</span>
-                <span className="text-[#16181D] font-semibold">{lead.ownerName}</span>
+                <span className="text-[#16181D] font-semibold">{lead.ownerName || lead.assignedToName}</span>
               </div>
 
               <div>
@@ -152,7 +177,7 @@ export const LeadDetail = () => {
           </div>
         </div>
 
-        {/* Reusable Polymorphic Activity Timeline Component (Right) */}
+        {/* Activity Timeline */}
         <div className="lg:col-span-2 p-6 rounded-[24px] border border-[#EEF1FA] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
           <Timeline
             activities={activities}

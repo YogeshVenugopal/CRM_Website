@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLES, ROLE_LABELS } from '../../utils/rbac';
+import { ROLE_LABELS } from '../../utils/rbac';
 import { Avatar } from '../ui/Avatar';
-import { LogOut, UserCheck, ChevronDown, RefreshCw } from 'lucide-react';
+import { LogOut, ChevronDown, Shield, Settings } from 'lucide-react';
 
 export const UserMenu = () => {
-  const { user, role, logout, switchRole } = useAuth();
+  const { user, role, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -34,39 +34,30 @@ export const UserMenu = () => {
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-64 bg-white border border-[#EEF1FA] rounded-[24px] shadow-2xl z-50 p-3 space-y-2">
-          {/* Header */}
-          <div className="px-3 py-2 border-b border-[#EEF1FA]">
-            <p className="text-xs font-bold text-[#16181D]">
-              {user?.name}
-            </p>
-            <p className="text-[11px] text-[#8A8FA3] font-mono">
-              {user?.email}
-            </p>
+          {/* User Info */}
+          <div className="px-3 py-3 border-b border-[#EEF1FA]">
+            <p className="text-xs font-bold text-[#16181D]">{user?.name}</p>
+            <p className="text-[11px] text-[#8A8FA3] font-mono">{user?.email}</p>
+            <div className="flex items-center gap-1.5 mt-2">
+              <Shield className="w-3 h-3 text-[#3B5BFD]" />
+              <span className="text-[10px] font-mono font-bold uppercase text-[#3B5BFD]">
+                {role?.replace(/_/g, ' ') || 'User'}
+              </span>
+            </div>
           </div>
 
-          {/* Quick Role Switcher */}
-          <div>
-            <div className="text-[10px] font-mono font-bold uppercase text-[#8A8FA3] px-3 py-1 flex items-center gap-1.5">
-              <RefreshCw className="w-3 h-3 text-[#3B5BFD]" /> Switch Active Role
-            </div>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {Object.values(ROLES).map((rKey) => (
-                <button
-                  key={rKey}
-                  onClick={() => {
-                    switchRole(rKey);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-1.5 rounded-full text-xs flex items-center justify-between transition-colors ${
-                    role === rKey
-                      ? 'bg-[#3B5BFD] font-bold text-white shadow-xs'
-                      : 'text-[#16181D] hover:bg-[#EEF1FA]'
-                  }`}
-                >
-                  <span className="capitalize">{rKey.replace('_', ' ')}</span>
-                  {role === rKey && <UserCheck className="w-3.5 h-3.5 text-white" />}
-                </button>
-              ))}
+          {/* Account Info */}
+          <div className="px-3 py-2">
+            <div className="text-[10px] font-mono font-bold uppercase text-[#8A8FA3] mb-2">Account</div>
+            <div className="space-y-1.5 text-xs text-[#16181D]">
+              <div className="flex items-center gap-2">
+                <span className="text-[#8A8FA3] w-16">Role</span>
+                <span className="font-medium capitalize">{role?.replace(/_/g, ' ')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#8A8FA3] w-16">Status</span>
+                <span className="font-medium text-[#10B981]">Active</span>
+              </div>
             </div>
           </div>
 

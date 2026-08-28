@@ -1,18 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { mockService } from '../../mock/mockService';
+import { opportunitiesApi, projectsApi, financeApi, leadsApi, tasksApi } from '../../lib/api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { ChartCard } from '../../components/ui/ChartCard';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { SkeletonMetric } from '../../components/ui/SkeletonRow';
+import { EmptyState } from '../../components/ui/EmptyState';
 import {
   TrendingUp,
   DollarSign,
-  Briefcase,
-  Users,
   Calendar,
-  ChevronRight,
+  ArrowRight,
+  BarChart3,
+  Briefcase,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -28,100 +30,163 @@ import {
 
 export const DashboardView = () => {
   const { user, role } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
-  const [timeRange, setTimeRange] = useState('1m');
+
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [oppsRes, projsRes, invsRes, leadsRes, tasksRes] = await Promise.allSettled([
+        opportunitiesApi.list({ limit: 100 }),
+        projectsApi.list({ limit: 100 }),
+        financeApi.listInvoices({ limit: 100 }),
+        leadsApi.list({ limit: 100 }),
+        tasksApi.list({ limit: 100 }),
+      ]);
+
+      const opps = oppsRes.status === 'fulfilled' ? oppsRes.value.data : [];
+      const projs = projsRes.status === 'fulfilled' ? projsRes.value.data : [];
+      const invs = invsRes.status === 'fulfilled' ? invsRes.value.data : [];
+      const leads = leadsRes.status === 'fulfilled' ? leadsRes.value.data : [];
+      const tasks = tasksRes.status === 'fulfilled' ? tasksRes.value.data : [];
+
+      // Compute real metrics
+      const pipelineVal = opps
+        .filter((o) => !['won', 'lost'].includes(o.stage))
+        .reduce((acc, curr) => acc + (curr.value || 0), 0);
+
+      const wonValue = opps
+        .filter((o) => o.stage === 'won')
+        .reduce((acc, curr) => acc + (curr.value || 0), 0);
+
+      const lostValue = opps
+        .filter((o) => o.stage === 'lost')
+        .reduce((acc, curr) => acc + (curr.value || 0), 0);
+
+      const totalInvoiced = invs.reduce((acc, curr) => acc + (curr.total || 0), 0);
+      const totalPaid = invs.reduce((acc, curr) => acc + (curr.paidAmount || 0), 0);
+      const overdueTotal = invs
+        .filter((i) => i.status === 'overdue')
+        .reduce((acc, curr) => acc + (curr.balance || 0), 0);
+
+      // Pipeline by stage for pie chart
+      const stageCounts = {};
+      opps.forEach((o) => {
+        if (!['won', 'lost'].includes(o.stage)) {
+          stageCounts[o.stage] = (stageCounts[o.stage] || 0) + 1;
+        }
+      });
+
+      // Recent opportunities for activity feed
+      const recentOpps = [...opps]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 5);
+
+      // Open tasks
+      const openTasks = tasks.filter((t) => t.status !== 'done');
+
+      setData({
+        pipelineVal,
+        wonValue,
+        lostValue,
+        totalInvoiced,
+        totalPaid,
+        overdueTotal,
+        oppsCount: opps.length,
+        leadsCount: leads.length,
+        projsCount: projs.length,
+        tasksCount: openTasks.length,
+        stageCounts,
+        invs,
+        opps,
+        projs,
+        tasks,
+        recentOpps,
+        openTasks: openTasks.slice(0, 5),
+      });
+    } catch (e) {
+      console.error('Dashboard fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchDashboard = async () => {
-      setLoading(true);
-      try {
-        const [opps, projs, invs, leads, tasks] = await Promise.all([
-          mockService.getOpportunities(),
-          mockService.getProjects(),
-          mockService.getInvoices(),
-          mockService.getLeads(),
-          mockService.getTasks(),
-        ]);
-
-        const pipelineVal = opps
-          .filter((o) => o.stage !== 'won' && o.stage !== 'lost')
-          .reduce((acc, curr) => acc + (curr.value || 0), 0);
-
-        const wonThisMonth = opps
-          .filter((o) => o.stage === 'won')
-          .reduce((acc, curr) => acc + (curr.value || 0), 0);
-
-        const overdueTotal = invs
-          .filter((i) => i.status === 'overdue')
-          .reduce((acc, curr) => acc + (curr.balance || 0), 0);
-
-        setData({
-          pipelineVal,
-          wonThisMonth,
-          overdueTotal,
-          oppsCount: opps.length,
-          leadsCount: leads.length,
-          projsCount: projs.length,
-          invs,
-          opps,
-          projs,
-          tasks,
-        });
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboard();
-  }, [role]);
+  }, [fetchDashboard]);
 
   if (loading || !data) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <SkeletonMetric />
-        <SkeletonMetric />
-        <SkeletonMetric />
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SkeletonMetric />
+          <SkeletonMetric />
+          <SkeletonMetric />
+          <SkeletonMetric />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <SkeletonMetric />
+          <SkeletonMetric />
+          <SkeletonMetric />
+        </div>
       </div>
     );
   }
 
-  // Monthly Revenue Trend Data
-  const trendData = [
-    { label: 'Jan', value: 450000, secondary: 210000 },
-    { label: 'Feb', value: 520000, secondary: 300000 },
-    { label: 'Mar', value: 680000, secondary: 410000 },
-    { label: 'Apr', value: 850000, secondary: 590000 },
-    { label: 'May', value: 940000, secondary: 620000 },
-    { label: 'Jun', value: 1250000, secondary: 880000 },
-  ];
+  // Pipeline stage distribution for pie chart
+  const stageColors = {
+    prospecting: '#8A8FA3',
+    qualification: '#FDB022',
+    proposal: '#22D3EE',
+    negotiation: '#3B5BFD',
+  };
 
-  // Pipeline Stage Distribution
-  const stageDistribution = [
-    { name: 'Prospecting', value: 25, color: '#3B5BFD' },
-    { name: 'Proposal', value: 45, color: '#22D3EE' },
-    { name: 'Negotiation', value: 20, color: '#FDB022' },
-    { name: 'Won', value: 10, color: '#10B981' },
-  ];
+  const pieData = Object.entries(data.stageCounts).map(([stage, count]) => ({
+    name: stage.charAt(0).toUpperCase() + stage.slice(1),
+    value: count,
+    color: stageColors[stage] || '#8A8FA3',
+  }));
 
-  const timeRanges = ['1d', '1w', '2w', '1m', '1y', 'all'];
+  // Monthly trend (last 6 months from real data)
+  const monthlyData = (() => {
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+      const monthStart = d.toISOString();
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString();
 
-  // Custom Dark Tooltip
+      const monthInvoiced = data.invs
+        .filter((inv) => {
+          const created = new Date(inv.createdAt);
+          return created >= new Date(monthStart) && created <= new Date(monthEnd);
+        })
+        .reduce((acc, inv) => acc + (inv.total || 0), 0);
+
+      const monthPaid = data.invs
+        .filter((inv) => {
+          const created = new Date(inv.createdAt);
+          return created >= new Date(monthStart) && created <= new Date(monthEnd);
+        })
+        .reduce((acc, inv) => acc + (inv.paidAmount || 0), 0);
+
+      months.push({ label: monthLabel, invoiced: monthInvoiced, paid: monthPaid });
+    }
+    return months;
+  })();
+
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-[#1B1D29] text-white p-3 rounded-2xl shadow-xl text-xs font-mono border border-white/10">
           <p className="font-bold text-white mb-1">{label}</p>
-          <p className="text-[#3B5BFD] font-bold">
-            Revenue: {formatCurrency(payload[0].value)}
-          </p>
-          {payload[1] && (
-            <p className="text-[#FDB022] font-semibold">
-              Target: {formatCurrency(payload[1].value)}
+          {payload.map((p, i) => (
+            <p key={i} style={{ color: p.color }} className="font-semibold">
+              {p.name}: {formatCurrency(p.value)}
             </p>
-          )}
+          ))}
         </div>
       );
     }
@@ -130,223 +195,218 @@ export const DashboardView = () => {
 
   return (
     <div className="space-y-8">
-      {/* Header Context */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-[#16181D]">
-            Welcome back, {user?.name || 'Executive'}
-          </h1>
-          <p className="text-xs text-[#8A8FA3] mt-0.5">
-            Operational dashboard for role: <span className="font-semibold text-[#3B5BFD] capitalize">{role}</span>
-          </p>
-        </div>
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold font-display text-[#16181D]">
+          Welcome back, {user?.name?.split(' ')[0] || 'there'}
+        </h1>
+        <p className="text-xs text-[#8A8FA3] mt-0.5">
+          Here's what's happening across your business today
+        </p>
       </div>
 
-      {/* Overview Stat Cards with Segmented Progress Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card 1: Pipeline Value */}
-        <div className="card-shell space-y-4">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Pipeline Value */}
+        <div className="card-shell space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#8A8FA3]">
-              Active Pipeline Value
-            </span>
-            <span className="w-8 h-8 rounded-full bg-[#3B5BFD]/10 text-[#3B5BFD] flex items-center justify-center">
-              <TrendingUp className="w-4 h-4" />
-            </span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A8FA3]">Pipeline Value</span>
+            <div className="w-8 h-8 rounded-lg bg-[#3B5BFD]/10 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4 text-[#3B5BFD]" />
+            </div>
           </div>
-
-          <div className="text-3xl font-extrabold font-mono text-[#16181D]">
+          <div className="text-2xl font-extrabold font-mono text-[#16181D]">
             {formatCurrency(data.pipelineVal)}
           </div>
-
-          {/* Segmented Horizontal Stacked Progress Bar */}
-          <div className="space-y-2 pt-2">
-            <div className="h-2 w-full bg-[#EEF1FA] rounded-full overflow-hidden flex">
-              <div className="h-full bg-[#3B5BFD] w-[45%]" />
-              <div className="h-full bg-[#22D3EE] w-[30%]" />
-              <div className="h-full bg-[#FDB022] w-[25%]" />
-            </div>
-
-            {/* Dot Legend Row */}
-            <div className="flex items-center justify-between text-[11px] text-[#8A8FA3] font-medium pt-1">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#3B5BFD]" />
-                <span>Proposal 45%</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#22D3EE]" />
-                <span>Negotiation 30%</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#FDB022]" />
-                <span>Initial 25%</span>
-              </div>
-            </div>
+          <div className="text-[11px] text-[#8A8FA3]">
+            {data.opps.filter((o) => !['won', 'lost'].includes(o.stage)).length} active deals
           </div>
         </div>
 
-        {/* Card 2: Won Deals This Month */}
-        <div className="card-shell space-y-4">
+        {/* Won Revenue */}
+        <div className="card-shell space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#8A8FA3]">
-              Won Revenue (This Month)
-            </span>
-            <span className="w-8 h-8 rounded-full bg-[#3B5BFD]/10 text-[#3B5BFD] flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
-            </span>
-          </div>
-
-          <div className="text-3xl font-extrabold font-mono text-[#16181D]">
-            {formatCurrency(data.wonThisMonth)}
-          </div>
-
-          <div className="space-y-2 pt-2">
-            <div className="h-2 w-full bg-[#EEF1FA] rounded-full overflow-hidden flex">
-              <div className="h-full bg-[#3B5BFD] w-[70%]" />
-              <div className="h-full bg-[#EEF1FA] w-[30%]" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A8FA3]">Won Revenue</span>
+            <div className="w-8 h-8 rounded-lg bg-[#10B981]/10 flex items-center justify-center">
+              <DollarSign className="w-4 h-4 text-[#10B981]" />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-[#8A8FA3] font-medium pt-1">
-              <span className="text-[#3B5BFD] font-bold">70% Target Reached</span>
-              <span>Goal: ₹2,000,000</span>
-            </div>
+          </div>
+          <div className="text-2xl font-extrabold font-mono text-[#10B981]">
+            {formatCurrency(data.wonValue)}
+          </div>
+          <div className="text-[11px] text-[#8A8FA3]">
+            {data.opps.filter((o) => o.stage === 'won').length} won deals
           </div>
         </div>
 
-        {/* Card 3: Overdue Receivables */}
-        <div className="card-shell space-y-4">
+        {/* Overdue */}
+        <div className="card-shell space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#8A8FA3]">
-              Overdue Receivables
-            </span>
-            <span className="w-8 h-8 rounded-full bg-[#FEF2F2] text-[#EF4444] flex items-center justify-center">
-              <Calendar className="w-4 h-4" />
-            </span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A8FA3]">Overdue</span>
+            <div className="w-8 h-8 rounded-lg bg-[#EF4444]/10 flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-[#EF4444]" />
+            </div>
           </div>
-
-          <div className="text-3xl font-extrabold font-mono text-[#EF4444]">
+          <div className="text-2xl font-extrabold font-mono text-[#EF4444]">
             {formatCurrency(data.overdueTotal)}
           </div>
+          <div className="text-[11px] text-[#8A8FA3]">
+            {data.invs.filter((i) => i.status === 'overdue').length} overdue invoices
+          </div>
+        </div>
 
-          <div className="space-y-2 pt-2">
-            <div className="h-2 w-full bg-[#EEF1FA] rounded-full overflow-hidden flex">
-              <div className="h-full bg-[#EF4444] w-[35%]" />
-              <div className="h-full bg-[#EEF1FA] w-[65%]" />
+        {/* Open Tasks */}
+        <div className="card-shell space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A8FA3]">Open Tasks</span>
+            <div className="w-8 h-8 rounded-lg bg-[#F59E0B]/10 flex items-center justify-center">
+              <Briefcase className="w-4 h-4 text-[#F59E0B]" />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-[#8A8FA3] font-medium pt-1">
-              <span className="text-[#EF4444] font-bold">2 Invoices Pending</span>
-              <span>Requires Collections</span>
-            </div>
+          </div>
+          <div className="text-2xl font-extrabold font-mono text-[#16181D]">
+            {data.tasksCount}
+          </div>
+          <div className="text-[11px] text-[#8A8FA3]">
+            across {data.projsCount} projects
           </div>
         </div>
       </div>
 
-      {/* Main Charts Row */}
+      {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Primary Chart Card: Dual-Tone Smooth Line/Area Chart */}
+        {/* Revenue Trend */}
         <div className="lg:col-span-2">
-          <ChartCard
-            title="Commercial Revenue Trend"
-            subtitle="Closed deal value vs monthly baseline projection"
-            action={
-              <div className="flex items-center gap-1 bg-[#EEF1FA] p-1 rounded-full">
-                {timeRanges.map((range) => (
-                  <button
-                    key={range}
-                    onClick={() => setTimeRange(range)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                      timeRange === range
-                        ? 'bg-[#3B5BFD] text-white shadow-xs'
-                        : 'text-[#8A8FA3] hover:text-[#16181D]'
-                    }`}
-                  >
-                    {range}
-                  </button>
-                ))}
-              </div>
-            }
-          >
+          <ChartCard title="Revenue Trend" subtitle="Invoiced vs collected over last 6 months">
             <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="colorPrimary" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B5BFD" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#3B5BFD" stopOpacity={0.0} />
+                  <linearGradient id="gradInvoiced" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3B5BFD" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3B5BFD" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="colorSecondary" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#FDB022" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#FDB022" stopOpacity={0.0} />
+                  <linearGradient id="gradPaid" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="label" stroke="#8A8FA3" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="#8A8FA3" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v/1000}k`} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="value" stroke="#3B5BFD" strokeWidth={3} fillOpacity={1} fill="url(#colorPrimary)" />
-                <Area type="monotone" dataKey="secondary" stroke="#FDB022" strokeWidth={2} strokeDasharray="3 3" fillOpacity={1} fill="url(#colorSecondary)" />
+                <Area type="monotone" dataKey="invoiced" name="Invoiced" stroke="#3B5BFD" strokeWidth={2} fillOpacity={1} fill="url(#gradInvoiced)" />
+                <Area type="monotone" dataKey="paid" name="Collected" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#gradPaid)" />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
         </div>
 
-        {/* Breakdown Card: Concentric Multi-Ring Radial Chart */}
-        <div className="lg:col-span-1">
-          <ChartCard title="Deal Stage Breakdown" subtitle="Opportunity concentration">
-            <div className="flex flex-col items-center">
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie
-                    data={stageDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={75}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {stageDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-
-              {/* Legend List */}
-              <div className="w-full space-y-2 pt-2 border-t border-[#EEF1FA]">
-                {stageDistribution.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between text-xs font-medium text-[#16181D]">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span>{item.name}</span>
+        {/* Pipeline Breakdown */}
+        <div>
+          <ChartCard title="Pipeline Breakdown" subtitle="Active deals by stage">
+            {pieData.length > 0 ? (
+              <div className="flex flex-col items-center">
+                <ResponsiveContainer width="100%" height={180}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={70}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="w-full space-y-2 pt-2 border-t border-[#EEF1FA]">
+                  {pieData.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between text-xs font-medium text-[#16181D]">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span>{item.name}</span>
+                      </div>
+                      <span className="font-mono text-[#8A8FA3]">{item.value}</span>
                     </div>
-                    <span className="font-mono text-[#8A8FA3]">{item.value}%</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-xs text-[#8A8FA3]">
+                <BarChart3 className="w-8 h-8 mb-2 text-[#8A8FA3]/30" />
+                No pipeline data yet
+              </div>
+            )}
           </ChartCard>
         </div>
       </div>
 
-      {/* Actionable Exceptions Card */}
-      <div className="card-shell space-y-4">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-[#8A8FA3]">
-          Priority Actionable Items
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="p-4 rounded-2xl bg-[#EEF1FA]/50 border border-[#EEF1FA] space-y-2">
-            <Badge status="overdue" customLabel="Overdue Invoice" />
-            <div className="font-bold text-xs text-[#16181D]">Acme Corp — ₹4,50,000</div>
-            <div className="text-[11px] text-[#8A8FA3]">Payment past due by 12 days</div>
+      {/* Activity & Tasks Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Deals */}
+        <div className="card-shell space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8FA3]">Recent Deals</h3>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/pipeline')}>
+              View Pipeline <ArrowRight className="w-3 h-3 ml-1" />
+            </Button>
           </div>
-          <div className="p-4 rounded-2xl bg-[#EEF1FA]/50 border border-[#EEF1FA] space-y-2">
-            <Badge status="proposal" customLabel="Pending Proposal" />
-            <div className="font-bold text-xs text-[#16181D]">Website Revamp & CMS</div>
-            <div className="text-[11px] text-[#8A8FA3]">Quotation QT-2026-001 sent</div>
+          {data.recentOpps.length === 0 ? (
+            <EmptyState title="No deals yet" description="Create your first opportunity to get started." />
+          ) : (
+            <div className="space-y-2">
+              {data.recentOpps.map((opp) => (
+                <div
+                  key={opp.id}
+                  onClick={() => navigate('/pipeline')}
+                  className="flex items-center justify-between p-3 rounded-xl bg-[#EEF1FA]/40 border border-[#EEF1FA] hover:border-[#3B5BFD]/30 cursor-pointer transition-all"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-[#16181D] truncate">{opp.title}</div>
+                    <div className="text-[11px] text-[#8A8FA3]">{opp.clientName || 'No client'}</div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs font-mono font-bold text-[#3B5BFD]">{formatCurrency(opp.value)}</span>
+                    <Badge status={opp.stage} size="sm" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Open Tasks */}
+        <div className="card-shell space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8FA3]">Open Tasks</h3>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/tasks')}>
+              View Board <ArrowRight className="w-3 h-3 ml-1" />
+            </Button>
           </div>
-          <div className="p-4 rounded-2xl bg-[#EEF1FA]/50 border border-[#EEF1FA] space-y-2">
-            <Badge status="in_progress" customLabel="Project Milestones" />
-            <div className="font-bold text-xs text-[#16181D]">ERP Phase 1 Setup</div>
-            <div className="text-[11px] text-[#8A8FA3]">3 tasks remaining for sprint</div>
-          </div>
+          {data.openTasks.length === 0 ? (
+            <EmptyState title="No open tasks" description="All caught up!" />
+          ) : (
+            <div className="space-y-2">
+              {data.openTasks.map((task) => (
+                <div
+                  key={task.id}
+                  onClick={() => navigate('/tasks')}
+                  className="flex items-center justify-between p-3 rounded-xl bg-[#EEF1FA]/40 border border-[#EEF1FA] hover:border-[#3B5BFD]/30 cursor-pointer transition-all"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-[#16181D] truncate">{task.title}</div>
+                    <div className="text-[11px] text-[#8A8FA3]">{task.projectName || 'No project'}</div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Badge status={task.priority} size="sm" />
+                    <Badge status={task.status} size="sm" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

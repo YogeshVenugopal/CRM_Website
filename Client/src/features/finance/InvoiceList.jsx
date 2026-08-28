@@ -1,31 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockService } from '../../mock/mockService';
+import { financeApi } from '../../lib/api';
+import { useNotification } from '../../contexts/NotificationContext';
 import { DataTable } from '../../components/ui/DataTable';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Send, CheckCircle2, XCircle } from 'lucide-react';
 
 export const InvoiceList = () => {
   const navigate = useNavigate();
+  const { addToast } = useNotification();
+
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+
+  const fetchInvoices = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await financeApi.listInvoices({ limit: 100 });
+      setInvoices(data);
+    } catch (e) {
+      addToast({ title: 'Error', message: e.message || 'Failed to load invoices', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
 
   useEffect(() => {
-    const fetchInvoices = async () => {
-      setLoading(true);
-      try {
-        const data = await mockService.getInvoices();
-        setInvoices(data);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchInvoices();
-  }, []);
+  }, [fetchInvoices]);
+
+  const handleAction = async () => {
+    if (!confirmAction) return;
+    setActionLoading(true);
+    try {
+      const { action, invoice } = confirmAction;
+      if (action === 'send') await financeApi.sendInvoice(invoice.id);
+      else if (action === 'approve') await financeApi.approveInvoice(invoice.id);
+      else if (action === 'cancel') await financeApi.cancelInvoice(invoice.id);
+
+      addToast({
+        title: `Invoice ${action}ed`,
+        message: `${invoice.invoiceNumber} has been ${action}ed.`,
+        type: action === 'cancel' ? 'warning' : 'success',
+      });
+      setConfirmAction(null);
+      fetchInvoices();
+    } catch (e) {
+      addToast({ title: 'Error', message: e.message, type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const columns = [
     {
@@ -33,20 +63,16 @@ export const InvoiceList = () => {
       key: 'invoiceNumber',
       sortable: true,
       mono: true,
-      render: (val) => (
-        <div className="font-bold text-[#16181D]">
-          {val}
-        </div>
-      ),
+      render: (val) => <div className="font-bold text-[#16181D]">{val}</div>,
     },
     {
       header: 'Client',
       key: 'clientName',
       sortable: true,
-      render: (val) => <span className="font-semibold text-[#16181D]">{val}</span>,
+      render: (val) => <span className="font-semibold text-[#16181D]">{val || '—'}</span>,
     },
     {
-      header: 'Total Invoiced',
+      header: 'Total',
       key: 'total',
       sortable: true,
       mono: true,
@@ -54,7 +80,7 @@ export const InvoiceList = () => {
       render: (val) => formatCurrency(val),
     },
     {
-      header: 'Paid Amount',
+      header: 'Paid',
       key: 'paidAmount',
       sortable: true,
       mono: true,
@@ -62,7 +88,7 @@ export const InvoiceList = () => {
       render: (val) => <span className="text-[#3B5BFD] font-semibold">{formatCurrency(val)}</span>,
     },
     {
-      header: 'Remaining Balance',
+      header: 'Balance',
       key: 'balance',
       sortable: true,
       mono: true,
@@ -88,13 +114,20 @@ export const InvoiceList = () => {
       key: 'actions',
       align: 'right',
       render: (_, row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate(`/invoices/${row.id}`)}
-        >
-          View Invoice <ArrowRight className="w-3 h-3 ml-1" />
-        </Button>
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          {row.status === 'draft' && (
+            <Button variant="ghost" size="sm" icon={Send} onClick={() => setConfirmAction({ action: 'send', invoice: row })} className="text-[#3B5BFD]" title="Send" />
+          )}
+          {row.status === 'sent' && (
+            <>
+              <Button variant="ghost" size="sm" icon={CheckCircle2} onClick={() => setConfirmAction({ action: 'approve', invoice: row })} className="text-[#10B981]" title="Approve" />
+              <Button variant="ghost" size="sm" icon={XCircle} onClick={() => setConfirmAction({ action: 'cancel', invoice: row })} className="text-[#EF4444]" title="Cancel" />
+            </>
+          )}
+          <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/${row.id}`)}>
+            View <ArrowRight className="w-3 h-3 ml-1" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -103,11 +136,9 @@ export const InvoiceList = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-[#16181D]">
-            Financial Invoices
-          </h1>
+          <h1 className="text-2xl font-bold font-display text-[#16181D]">Invoices</h1>
           <p className="text-xs text-[#8A8FA3] mt-0.5">
-            Track customer invoicing, payment collection, and overdue balances
+            Track billing, payments, and overdue balances
           </p>
         </div>
       </div>
@@ -116,8 +147,19 @@ export const InvoiceList = () => {
         columns={columns}
         data={invoices}
         loading={loading}
-        searchPlaceholder="Search invoices by number, client name, or status..."
+        searchPlaceholder="Search by number, client, or status..."
         onRowClick={(row) => navigate(`/invoices/${row.id}`)}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(confirmAction)}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleAction}
+        title={`${confirmAction?.action === 'send' ? 'Send' : confirmAction?.action === 'approve' ? 'Approve' : 'Cancel'} Invoice`}
+        message={`Are you sure you want to ${confirmAction?.action} ${confirmAction?.invoice?.invoiceNumber}?`}
+        confirmLabel={`${confirmAction?.action === 'cancel' ? 'Cancel' : 'Confirm'} Invoice`}
+        variant={confirmAction?.action === 'cancel' ? 'danger' : 'primary'}
+        loading={actionLoading}
       />
     </div>
   );

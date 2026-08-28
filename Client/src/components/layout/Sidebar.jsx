@@ -48,9 +48,8 @@ export const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
       )}
 
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-40 w-20 md:w-20 bg-white border-r border-[#EEF1FA] flex flex-col items-center justify-between py-6 transition-transform duration-200 ease-in-out shadow-[0_10px_30px_rgba(0,0,0,0.02)] ${
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        className={`fixed md:static inset-y-0 left-0 z-40 w-20 md:w-20 bg-white border-r border-[#EEF1FA] flex flex-col items-center justify-between py-6 transition-transform duration-200 ease-in-out shadow-[0_10px_30px_rgba(0,0,0,0.02)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
       >
         {/* Top: Pinned User Avatar & Brand Logo */}
         <div className="flex flex-col items-center space-y-5">
@@ -80,17 +79,16 @@ export const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
                 onClick={onCloseMobile}
                 title={item.label}
                 className={({ isActive }) =>
-                  `w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 relative group ${
-                    isActive
-                      ? 'bg-[#3B5BFD] text-white shadow-lg shadow-[#3B5BFD]/30 scale-105'
-                      : 'text-[#8A8FA3] hover:bg-[#EEF1FA] hover:text-[#16181D]'
+                  `w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 relative group ${isActive
+                    ? 'bg-[#3B5BFD] text-black shadow-lg shadow-[#3B5BFD]/30 scale-105'
+                    : 'text-[#8A8FA3] hover:bg-[#EEF1FA] hover:text-[#16181D]'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <Icon className={`w-5 h-5 shrink-0 stroke-[2.25] ${isActive ? 'text-white' : 'text-[#8A8FA3] group-hover:text-[#16181D]'}`} />
-                    
+                    <Icon className={`w-5 h-5 shrink-0 stroke-[2.25] ${isActive ? 'text-black' : 'text-[#8A8FA3] group-hover:text-[#16181D]'}`} />
+
                     {/* Tooltip on Hover */}
                     <span className="absolute left-16 bg-[#1B1D29] text-white text-xs font-semibold px-3 py-1.5 rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap shadow-xl">
                       {item.label}

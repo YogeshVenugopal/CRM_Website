@@ -1,68 +1,55 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { MOCK_USERS } from '../mock/mockData';
-import { apiClient } from '../lib/apiClient';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { authApi } from '../lib/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('crm_current_user');
-      return saved ? JSON.parse(saved) : MOCK_USERS[0];
-    } catch (e) {
-      return MOCK_USERS[0];
-    }
-  });
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] = useState(false);
-
-  // Sync user state with localStorage
+  // On mount: restore session via /auth/me
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('crm_current_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('crm_current_user');
-    }
-  }, [user]);
+    const restoreSession = async () => {
+      try {
+        const me = await authApi.getMe();
+        setUser(me);
+      } catch {
+        // Not authenticated — redirect to login handled by ProtectedRoute
+      } finally {
+        setLoading(false);
+      }
+    };
+    restoreSession();
+  }, []);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     setLoading(true);
     try {
-      const res = await apiClient.post('/auth/login', { email, password });
-      const loggedUser = res.data || MOCK_USERS.find((u) => u.email === email) || MOCK_USERS[0];
+      const { user: loggedUser } = await authApi.login(email, password);
       setUser(loggedUser);
       return loggedUser;
-    } catch (err) {
-      // Fallback for offline demo
-      const found = MOCK_USERS.find((u) => u.email === email) || MOCK_USERS[0];
-      setUser(found);
-      return found;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
-      await apiClient.post('/auth/logout');
-    } catch (e) {
-      console.log('Offline logout');
+      await authApi.logout();
+    } catch {
+      // ignore — clear locally regardless
     } finally {
       setUser(null);
     }
-  };
+  }, []);
 
-  /**
-   * Role Switcher for instant testing across all 6 roles
-   */
-  const switchRole = (roleKey) => {
-    const matchedUser = MOCK_USERS.find((u) => u.role === roleKey);
-    if (matchedUser) {
-      setUser(matchedUser);
-    } else if (user) {
-      setUser({ ...user, role: roleKey });
-    }
-  };
+  // Available users for login page demo selector
+  const [availableUsers, setAvailableUsers] = useState([]);
+  useEffect(() => {
+    import('../mock/mockData')
+      .then(({ MOCK_USERS }) => setAvailableUsers(MOCK_USERS))
+      .catch(() => {});
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -72,8 +59,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         login,
         logout,
-        switchRole,
-        availableUsers: MOCK_USERS,
+        availableUsers,
       }}
     >
       {children}

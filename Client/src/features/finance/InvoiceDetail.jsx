@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { mockService } from '../../mock/mockService';
+import { financeApi } from '../../lib/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { Breadcrumbs } from '../../components/ui/Breadcrumbs';
 import { Badge } from '../../components/ui/Badge';
@@ -19,27 +19,33 @@ export const InvoiceDetail = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchInvoice = async () => {
+  const fetchInvoice = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await mockService.getInvoiceById(id || 'inv-801');
+      const data = await financeApi.getInvoiceById(id);
       setInvoice(data);
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching invoice:', e);
+      addToast({ title: 'Error', message: e.message || 'Failed to load invoice', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, addToast]);
 
   useEffect(() => {
-    fetchInvoice();
-  }, [id]);
+    if (id) fetchInvoice();
+  }, [id, fetchInvoice]);
 
   const handleConfirmPayment = async (paymentPayload) => {
     setActionLoading(true);
     try {
-      const updatedInv = await mockService.recordPayment(invoice.id, paymentPayload);
-      setInvoice(updatedInv);
+      const result = await financeApi.recordPayment(invoice.id, paymentPayload);
+      if (result.invoice) {
+        setInvoice(result.invoice);
+      } else {
+        // Refetch to get updated state
+        fetchInvoice();
+      }
       setIsPaymentModalOpen(false);
       addToast({
         title: 'Payment recorded',
@@ -76,7 +82,7 @@ export const InvoiceDetail = () => {
             <Badge status={invoice.status} />
           </div>
           <p className="text-xs text-[#8A8FA3] mt-0.5">
-            Billed To: <span className="font-semibold text-[#16181D]">{invoice.clientName}</span>
+            Billed To: <span className="font-semibold text-[#16181D]">{invoice.clientName || 'N/A'}</span>
           </p>
         </div>
 
@@ -84,7 +90,7 @@ export const InvoiceDetail = () => {
           <Button variant="outline" size="sm" icon={ArrowLeft} onClick={() => navigate('/invoices')}>
             Back
           </Button>
-          {invoice.balance > 0 && (
+          {invoice.balance > 0 && invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
             <Button
               variant="primary"
               size="sm"
@@ -102,7 +108,7 @@ export const InvoiceDetail = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-b border-[#EEF1FA] pb-4 text-xs font-mono">
           <div>
             <span className="text-[#8A8FA3] block text-[10px] uppercase font-sans">Issue Date</span>
-            <span className="text-[#16181D] font-bold">{formatDate(invoice.issueDate)}</span>
+            <span className="text-[#16181D] font-bold">{formatDate(invoice.issueDate || invoice.createdAt)}</span>
           </div>
           <div>
             <span className="text-[#8A8FA3] block text-[10px] uppercase font-sans">Payment Due Date</span>
@@ -130,13 +136,13 @@ export const InvoiceDetail = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EEF1FA]">
-                {invoice.items.map((item, idx) => (
+                {(invoice.items || []).map((item, idx) => (
                   <tr key={idx}>
                     <td className="p-3 text-[#16181D] font-sans font-medium">{item.description}</td>
                     <td className="p-3 text-center">{item.quantity}</td>
                     <td className="p-3 text-right">{formatCurrency(item.unitPrice)}</td>
                     <td className="p-3 text-right font-semibold text-[#16181D]">
-                      {formatCurrency(item.total)}
+                      {formatCurrency(item.total || item.lineTotal || (item.quantity * item.unitPrice))}
                     </td>
                   </tr>
                 ))}
@@ -145,7 +151,7 @@ export const InvoiceDetail = () => {
           </div>
         </div>
 
-        {/* Financial Summary Breakdown */}
+        {/* Financial Summary */}
         <div className="border-t border-[#EEF1FA] pt-4 flex flex-col items-end space-y-1.5 font-mono text-xs">
           <div className="flex justify-between w-64 text-[#8A8FA3]">
             <span>Subtotal:</span>
@@ -169,7 +175,7 @@ export const InvoiceDetail = () => {
           </div>
         </div>
 
-        {/* Payment History Audit Log */}
+        {/* Payment History */}
         {invoice.payments && invoice.payments.length > 0 && (
           <div className="border-t border-[#EEF1FA] pt-4 space-y-3">
             <h3 className="text-xs font-bold font-display uppercase tracking-wider text-[#8A8FA3]">
@@ -177,15 +183,15 @@ export const InvoiceDetail = () => {
             </h3>
             <div className="space-y-2 font-mono text-xs">
               {invoice.payments.map((p, idx) => (
-                <div key={idx} className="p-4 rounded-2xl bg-[#EEF1FA]/40 border border-[#EEF1FA] flex items-center justify-between">
+                <div key={p.id || idx} className="p-4 rounded-2xl bg-[#EEF1FA]/40 border border-[#EEF1FA] flex items-center justify-between">
                   <div>
                     <div className="font-bold text-[#3B5BFD]">
-                      + {formatCurrency(p.amount)} via {p.paymentMethod}
+                      + {formatCurrency(p.amount)} via {p.paymentMethod || p.method}
                     </div>
-                    <div className="text-[11px] text-[#8A8FA3]">Ref: {p.transactionRef}</div>
+                    <div className="text-[11px] text-[#8A8FA3]">Ref: {p.transactionRef || 'N/A'}</div>
                   </div>
                   <div className="text-right text-[11px] text-[#8A8FA3]">
-                    {formatDate(p.createdAt, true)}
+                    {formatDate(p.paidAt || p.paidDate || p.createdAt, true)}
                   </div>
                 </div>
               ))}

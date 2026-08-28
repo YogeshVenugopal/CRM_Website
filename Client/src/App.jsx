@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { AppShell } from './components/layout/AppShell';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { queryClient } from './lib/queryClient';
 
 // Feature Views
 import { Login } from './features/auth/Login';
@@ -23,52 +26,50 @@ import { InvoiceDetail } from './features/finance/InvoiceDetail';
 import { ReportsOverview } from './features/reports/ReportsOverview';
 
 export function App() {
-  const [quickActionModal, setQuickActionModal] = useState(null);
-
-  const handleQuickAction = (action) => {
-    // Quick action route handler or modal launcher
-    setQuickActionModal(action);
-  };
-
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <NotificationProvider>
-          <Routes>
-            {/* Public Login Route */}
-            <Route path="/login" element={<Login />} />
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <NotificationProvider>
+              <Routes>
+                {/* Public Auth Routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Login />} />
 
-            {/* Protected Application Routes inside AppShell */}
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <AppShell onQuickAction={handleQuickAction}>
-                    <Routes>
-                      <Route path="/dashboard" element={<DashboardView />} />
-                      <Route path="/leads" element={<LeadList />} />
-                      <Route path="/leads/:id" element={<LeadDetail />} />
-                      <Route path="/pipeline" element={<PipelineKanban />} />
-                      <Route path="/clients" element={<ClientList />} />
-                      <Route path="/clients/:id" element={<ClientDetail />} />
-                      <Route path="/quotations" element={<QuotationList />} />
-                      <Route path="/quotations/new" element={<QuotationBuilder />} />
-                      <Route path="/projects" element={<ProjectList />} />
-                      <Route path="/projects/:id" element={<ProjectDetail />} />
-                      <Route path="/tasks" element={<TaskBoard />} />
-                      <Route path="/invoices" element={<InvoiceList />} />
-                      <Route path="/invoices/:id" element={<InvoiceDetail />} />
-                      <Route path="/reports" element={<ReportsOverview />} />
-                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                    </Routes>
-                  </AppShell>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </NotificationProvider>
-      </AuthProvider>
-    </BrowserRouter>
+                {/* Protected Application Routes */}
+                <Route
+                  path="/*"
+                  element={
+                    <ProtectedRoute>
+                      <AppShell>
+                        <Routes>
+                          <Route path="/dashboard" element={<DashboardView />} />
+                          <Route path="/leads" element={<LeadList />} />
+                          <Route path="/leads/:id" element={<LeadDetail />} />
+                          <Route path="/pipeline" element={<PipelineKanban />} />
+                          <Route path="/clients" element={<ClientList />} />
+                          <Route path="/clients/:id" element={<ClientDetail />} />
+                          <Route path="/quotations" element={<QuotationList />} />
+                          <Route path="/quotations/new" element={<QuotationBuilder />} />
+                          <Route path="/projects" element={<ProjectList />} />
+                          <Route path="/projects/:id" element={<ProjectDetail />} />
+                          <Route path="/tasks" element={<TaskBoard />} />
+                          <Route path="/invoices" element={<InvoiceList />} />
+                          <Route path="/invoices/:id" element={<InvoiceDetail />} />
+                          <Route path="/reports" element={<ReportsOverview />} />
+                          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                        </Routes>
+                      </AppShell>
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </NotificationProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

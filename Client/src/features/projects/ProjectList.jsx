@@ -1,31 +1,82 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockService } from '../../mock/mockService';
+import { projectsApi } from '../../lib/api';
+import { useNotification } from '../../contexts/NotificationContext';
 import { DataTable } from '../../components/ui/DataTable';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { Modal } from '../../components/ui/Modal';
+import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { Briefcase, ArrowRight } from 'lucide-react';
+import { Plus, ArrowRight, Pencil, Trash2 } from 'lucide-react';
+
+const PROJECT_STATUSES = [
+  { label: 'Planned', value: 'planned' },
+  { label: 'In Progress', value: 'in_progress' },
+  { label: 'On Hold', value: 'on_hold' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Cancelled', value: 'cancelled' },
+];
 
 export const ProjectList = () => {
   const navigate = useNavigate();
+  const { addToast } = useNotification();
+
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingProject, setEditingProject] = useState(null);
+  const [deletingProject, setDeletingProject] = useState(null);
+  const [statusProject, setStatusProject] = useState(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [formLoading, setFormLoading] = useState(false);
+
+  const fetchProjects = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await projectsApi.list({ limit: 100 });
+      setProjects(data);
+    } catch (e) {
+      addToast({ title: 'Error', message: e.message || 'Failed to load projects', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
 
   useEffect(() => {
-    const fetchProjects = async () => {
-      setLoading(true);
-      try {
-        const data = await mockService.getProjects();
-        setProjects(data);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchProjects();
-  }, []);
+  }, [fetchProjects]);
+
+  const handleStatusChange = async () => {
+    if (!statusProject || !newStatus) return;
+    setFormLoading(true);
+    try {
+      await projectsApi.changeStatus(statusProject.id, newStatus);
+      addToast({ title: 'Status updated', message: `${statusProject.name} → ${newStatus.replace(/_/g, ' ')}`, type: 'success' });
+      setStatusProject(null);
+      fetchProjects();
+    } catch (e) {
+      addToast({ title: 'Error', message: e.message, type: 'error' });
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingProject) return;
+    setFormLoading(true);
+    try {
+      await projectsApi.delete(deletingProject.id);
+      addToast({ title: 'Project deleted', message: `${deletingProject.name} deleted.`, type: 'success' });
+      setDeletingProject(null);
+      fetchProjects();
+    } catch (e) {
+      addToast({ title: 'Error', message: e.message, type: 'error' });
+    } finally {
+      setFormLoading(false);
+    }
+  };
 
   const columns = [
     {
@@ -34,36 +85,24 @@ export const ProjectList = () => {
       sortable: true,
       render: (val, row) => (
         <div>
-          <div className="font-bold text-[#14181A] dark:text-[#EDF3EC]">{row.code} — {row.name}</div>
-          <div className="text-xs text-[#6B7168]">{row.clientName}</div>
+          <div className="font-bold text-[#16181D]">{row.code} — {val}</div>
+          <div className="text-xs text-[#8A8FA3]">{row.clientName || 'No client'}</div>
         </div>
       ),
     },
     {
-      header: 'Commercial Value',
+      header: 'Budget',
       key: 'commercialValue',
       sortable: true,
       mono: true,
       align: 'right',
-      render: (val) => formatCurrency(val),
+      render: (val, row) => formatCurrency(val || row.budget),
     },
     {
-      header: 'Project Manager',
+      header: 'Manager',
       key: 'managerName',
       sortable: true,
-    },
-    {
-      header: 'Handover Status',
-      key: 'handoverReceipt',
-      render: (val) => (
-        val ? (
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#2FA84C]/10 text-[#2FA84C] dark:text-[#3FCB63] font-semibold border border-[#2FA84C]/30">
-            ✓ Handover Verified
-          </span>
-        ) : (
-          <span className="text-[11px] font-mono text-[#6B7168]">Manual Direct</span>
-        )
-      ),
+      render: (val) => val || '—',
     },
     {
       header: 'Status',
@@ -71,35 +110,53 @@ export const ProjectList = () => {
       render: (val) => <Badge status={val} />,
     },
     {
-      header: 'Target Due',
+      header: 'Due Date',
       key: 'dueDate',
-      render: (val) => <span className="font-mono text-xs text-[#6B7168]">{formatDate(val)}</span>,
+      render: (val) => <span className="font-mono text-xs text-[#8A8FA3]">{formatDate(val)}</span>,
     },
     {
       header: '',
       key: 'actions',
       align: 'right',
       render: (_, row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate(`/projects/${row.id}`)}
-        >
-          Details <ArrowRight className="w-3 h-3 ml-1" />
-        </Button>
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Pencil}
+            onClick={() => {
+              setStatusProject(row);
+              setNewStatus(row.status);
+            }}
+            title="Change status"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Trash2}
+            onClick={() => setDeletingProject(row)}
+            className="text-[#EF4444]"
+            title="Delete"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/projects/${row.id}`)}
+          >
+            Details <ArrowRight className="w-3 h-3 ml-1" />
+          </Button>
+        </div>
       ),
     },
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold font-display text-[#14181A] dark:text-[#EDF3EC]">
-            Active Projects & Handovers
-          </h1>
-          <p className="text-xs text-[#6B7168] dark:text-[#95A99B]">
-            Operational projects spawned from accepted quotations and won opportunities
+          <h1 className="text-2xl font-bold font-display text-[#16181D]">Projects</h1>
+          <p className="text-xs text-[#8A8FA3] mt-0.5">
+            Track delivery, handovers, and team assignments
           </p>
         </div>
       </div>
@@ -108,8 +165,39 @@ export const ProjectList = () => {
         columns={columns}
         data={projects}
         loading={loading}
-        searchPlaceholder="Search projects by code, title, client, or manager..."
+        searchPlaceholder="Search by code, name, or client..."
         onRowClick={(row) => navigate(`/projects/${row.id}`)}
+      />
+
+      {/* Status Change Modal */}
+      <Modal
+        isOpen={Boolean(statusProject)}
+        onClose={() => setStatusProject(null)}
+        title="Change Project Status"
+        subtitle={`Update status for ${statusProject?.name || ''}`}
+      >
+        <div className="space-y-4">
+          <Select
+            label="New Status"
+            value={newStatus}
+            onChange={(e) => setNewStatus(e.target.value)}
+            options={PROJECT_STATUSES}
+          />
+          <div className="flex justify-end gap-3 pt-2 border-t border-[#EEF1FA]">
+            <Button variant="secondary" onClick={() => setStatusProject(null)} disabled={formLoading}>Cancel</Button>
+            <Button variant="primary" onClick={handleStatusChange} loading={formLoading}>Update Status</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(deletingProject)}
+        onClose={() => setDeletingProject(null)}
+        onConfirm={handleDelete}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${deletingProject?.name}"? This will also remove all associated tasks.`}
+        confirmLabel="Delete Project"
+        loading={formLoading}
       />
     </div>
   );

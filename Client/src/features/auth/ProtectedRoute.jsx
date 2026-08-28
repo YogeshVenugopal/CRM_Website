@@ -8,8 +8,11 @@ export const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FAFAF7] dark:bg-[#132A20] flex items-center justify-center text-sm font-mono text-[#6B7168]">
-        Authenticating...
+      <div className="min-h-screen bg-[#F8F9FC] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-[#3B5BFD] border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-medium text-[#8A8FA3]">Loading...</span>
+        </div>
       </div>
     );
   }
@@ -21,11 +24,12 @@ export const ProtectedRoute = ({ children, allowedRoles }) => {
   if (allowedRoles && !hasPermission(role, allowedRoles)) {
     return (
       <div className="p-8 text-center space-y-4">
-        <h2 className="text-xl font-bold font-display text-[#B5533E]">
-          403 — Access Forbidden
+        <h2 className="text-xl font-bold font-display text-[#EF4444]">
+          403 — Access Denied
         </h2>
-        <p className="text-sm text-[#6B7168] dark:text-[#95A99B]">
-          You don't have permission to view this section with role: <span className="font-mono font-bold">{role}</span>.
+        <p className="text-sm text-[#8A8FA3]">
+          You don't have permission to view this section.
+          Your role: <span className="font-mono font-bold text-[#16181D]">{role}</span>
         </p>
       </div>
     );

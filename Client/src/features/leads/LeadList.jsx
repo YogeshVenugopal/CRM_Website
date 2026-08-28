@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockService } from '../../mock/mockService';
+import { leadsApi } from '../../lib/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { DataTable } from '../../components/ui/DataTable';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Modal } from '../../components/ui/Modal';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { LeadFormModal } from './LeadFormModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { UserPlus, Plus, ArrowRight } from 'lucide-react';
+import { Plus, ArrowRight, Pencil, Trash2 } from 'lucide-react';
 
 export const LeadList = () => {
   const navigate = useNavigate();
@@ -17,64 +16,62 @@ export const LeadList = () => {
 
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingLead, setEditingLead] = useState(null);
+  const [deletingLead, setDeletingLead] = useState(null);
+  const [formLoading, setFormLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Form State
-  const [companyName, setCompanyName] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [estimatedValue, setEstimatedValue] = useState('');
-  const [source, setSource] = useState('Website');
-
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await mockService.getLeads();
+      const { data } = await leadsApi.list({ limit: 100 });
       setLeads(data);
     } catch (e) {
-      console.error(e);
+      addToast({ title: 'Error', message: e.message || 'Failed to load leads', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast]);
 
   useEffect(() => {
     fetchLeads();
-  }, []);
+  }, [fetchLeads]);
 
-  const handleCreateLead = async (e) => {
-    e.preventDefault();
+  const handleCreate = async (data) => {
+    setFormLoading(true);
     try {
-      const newLead = await mockService.createLead({
-        companyName,
-        contactName,
-        email,
-        phone,
-        estimatedValue: Number(estimatedValue) || 0,
-        source,
-      });
-
-      addToast({
-        title: 'Lead created',
-        message: `Lead "${companyName}" added successfully.`,
-        type: 'success',
-      });
-
-      setIsModalOpen(false);
-      // Reset form
-      setCompanyName('');
-      setContactName('');
-      setEmail('');
-      setPhone('');
-      setEstimatedValue('');
+      await leadsApi.create(data);
+      addToast({ title: 'Lead created', message: `"${data.company}" added successfully.`, type: 'success' });
       fetchLeads();
-    } catch (err) {
-      addToast({
-        title: 'Error creating lead',
-        message: err.message,
-        type: 'error',
-      });
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleEdit = async (data) => {
+    setFormLoading(true);
+    try {
+      await leadsApi.update(editingLead.id, data);
+      addToast({ title: 'Lead updated', message: `"${data.company}" updated successfully.`, type: 'success' });
+      fetchLeads();
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingLead) return;
+    setDeleteLoading(true);
+    try {
+      await leadsApi.delete(deletingLead.id);
+      addToast({ title: 'Lead deleted', message: `"${deletingLead.company || deletingLead.name}" deleted.`, type: 'success' });
+      setDeletingLead(null);
+      fetchLeads();
+    } catch (e) {
+      addToast({ title: 'Error', message: e.message, type: 'error' });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -85,8 +82,8 @@ export const LeadList = () => {
       sortable: true,
       render: (val, row) => (
         <div>
-          <div className="font-bold text-[#16181D]">{val}</div>
-          <div className="text-xs text-[#8A8FA3]">{row.contactName} ({row.email})</div>
+          <div className="font-bold text-[#16181D]">{val || row.company || row.name}</div>
+          <div className="text-xs text-[#8A8FA3]">{row.contactName || row.name} ({row.email})</div>
         </div>
       ),
     },
@@ -94,6 +91,7 @@ export const LeadList = () => {
       header: 'Source',
       key: 'source',
       sortable: true,
+      render: (val) => <span className="capitalize text-xs">{val}</span>,
     },
     {
       header: 'Est. Value',
@@ -101,7 +99,7 @@ export const LeadList = () => {
       sortable: true,
       mono: true,
       align: 'right',
-      render: (val) => formatCurrency(val),
+      render: (val, row) => formatCurrency(val || row.budget),
     },
     {
       header: 'Status',
@@ -111,9 +109,10 @@ export const LeadList = () => {
     {
       header: 'Assigned To',
       key: 'assignedToName',
+      render: (val, row) => val || row.ownerName || '—',
     },
     {
-      header: 'Created Date',
+      header: 'Created',
       key: 'createdAt',
       render: (val) => <span className="font-mono text-xs text-[#8A8FA3]">{formatDate(val)}</span>,
     },
@@ -122,16 +121,28 @@ export const LeadList = () => {
       key: 'actions',
       align: 'right',
       render: (_, row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/leads/${row.id}`);
-          }}
-        >
-          View 360° <ArrowRight className="w-3 h-3 ml-1" />
-        </Button>
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Pencil}
+            onClick={() => { setEditingLead(row); setIsFormOpen(true); }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Trash2}
+            onClick={() => setDeletingLead(row)}
+            className="text-[#EF4444] hover:text-[#DC2626]"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/leads/${row.id}`)}
+          >
+            View <ArrowRight className="w-3 h-3 ml-1" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -140,14 +151,16 @@ export const LeadList = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-[#16181D]">
-            Leads Directory
-          </h1>
+          <h1 className="text-2xl font-bold font-display text-[#16181D]">Leads</h1>
           <p className="text-xs text-[#8A8FA3] mt-0.5">
-            Capture, qualify, and convert potential business prospects into active sales opportunities
+            Capture, qualify, and convert prospects into opportunities
           </p>
         </div>
-        <Button variant="primary" icon={Plus} onClick={() => setIsModalOpen(true)}>
+        <Button
+          variant="primary"
+          icon={Plus}
+          onClick={() => { setEditingLead(null); setIsFormOpen(true); }}
+        >
           New Lead
         </Button>
       </div>
@@ -156,83 +169,27 @@ export const LeadList = () => {
         columns={columns}
         data={leads}
         loading={loading}
-        searchPlaceholder="Search leads by company, contact, or email..."
+        searchPlaceholder="Search by company, contact, or email..."
         onRowClick={(row) => navigate(`/leads/${row.id}`)}
       />
 
-      {/* New Lead Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Create New Prospect Lead"
-        subtitle="Add a new lead to start the qualification workflow"
-      >
-        <form onSubmit={handleCreateLead} className="space-y-4">
-          <Input
-            label="Company Name"
-            placeholder="e.g. Apex Global Solutions"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            required
-          />
+      <LeadFormModal
+        isOpen={isFormOpen}
+        onClose={() => { setIsFormOpen(false); setEditingLead(null); }}
+        onSubmit={editingLead ? handleEdit : handleCreate}
+        lead={editingLead}
+        loading={formLoading}
+      />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Contact Person Name"
-              placeholder="e.g. Sarah Jenkins"
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              required
-            />
-            <Input
-              label="Email Address"
-              type="email"
-              placeholder="sarah@apexglobal.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Phone Number"
-              placeholder="+91 98765 43210"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-            <Input
-              label="Estimated Deal Value (INR)"
-              type="number"
-              mono
-              placeholder="e.g. 500000"
-              value={estimatedValue}
-              onChange={(e) => setEstimatedValue(e.target.value)}
-            />
-          </div>
-
-          <Select
-            label="Lead Source Channel"
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            options={[
-              { label: 'Website Inquiry', value: 'Website' },
-              { label: 'Inbound Referral', value: 'Referral' },
-              { label: 'LinkedIn Outbound', value: 'LinkedIn' },
-              { label: 'Industry Conference / Event', value: 'Conference' },
-            ]}
-          />
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-[#EEF1FA]">
-            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              Create Lead
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(deletingLead)}
+        onClose={() => setDeletingLead(null)}
+        onConfirm={handleDelete}
+        title="Delete Lead"
+        message={`Are you sure you want to delete "${deletingLead?.company || deletingLead?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete Lead"
+        loading={deleteLoading}
+      />
     </div>
   );
 };
